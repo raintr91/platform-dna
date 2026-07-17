@@ -59,6 +59,19 @@ test('profile manifest freezes required package sets and supported adapters', ()
   assert.deepEqual(manifest.profiles.fe.adapters, ['nuxt4', 'nextjs'])
   assert.deepEqual(manifest.profiles.be.adapters, ['fastapi', 'laravel'])
   assert.deepEqual(manifest.profiles.tests.required, ['testkit'])
+  const schema = JSON.parse(
+    readFileSync(
+      path.resolve('templates/schemas/platform-repos.schema.json'),
+      'utf8',
+    ),
+  )
+  assert.equal(schema.properties.defaultGroup.enum.includes('tooling'), false)
+  assert.equal(
+    schema.properties.projects.additionalProperties.properties.role.enum.includes(
+      'tooling',
+    ),
+    false,
+  )
 })
 
 for (const [type, adapter] of [

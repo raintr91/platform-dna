@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["defaultGroup", "harness", "groups", "projects"],
   "properties": {
-    "defaultGroup": { "enum": ["docs", "fe", "be", "tests", "tooling"] },
+    "defaultGroup": { "enum": ["docs", "fe", "be", "tests"] },
     "harness": {
       "type": "object",
       "required": ["profiles"],
@@ -34,7 +34,7 @@
         "required": ["root", "role", "repo", "write"],
         "properties": {
           "root": { "const": "." },
-          "role": { "enum": ["docs", "fe", "be", "tests", "tooling"] },
+          "role": { "enum": ["docs", "fe", "be", "tests"] },
           "repo": { "type": "string", "minLength": 1 },
           "url": { "type": "string", "format": "uri" },
           "write": { "type": "boolean" }
