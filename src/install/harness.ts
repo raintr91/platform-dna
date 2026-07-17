@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto'
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  unlinkSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
@@ -14,13 +16,39 @@ import {
   type ProfileType,
 } from '../config/project-root.js'
 
-interface InstallManifest {
+export interface InstallManifestFile {
+  source: string
+  sha256: string
+  state: 'active' | 'stale'
+}
+
+export interface InstallManifest {
   schemaVersion: 1
   package: '@platform/platform-dna'
   packageVersion: string
   type: ProfileType
   harnessApi: 1
-  files: Record<string, { source: string; sha256: string }>
+  files: Record<string, InstallManifestFile>
+}
+
+export interface HarnessFileStatus extends InstallManifestFile {
+  path: string
+  status: 'unmodified' | 'modified' | 'missing'
+  prunable: boolean
+}
+
+export interface HarnessStatus {
+  manifestPath: string
+  type: ProfileType
+  packageVersion: string
+  files: HarnessFileStatus[]
+}
+
+export interface PruneHarnessResult {
+  dryRun: boolean
+  planned: string[]
+  deleted: string[]
+  skipped: HarnessFileStatus[]
 }
 
 function hash(content: string): string {
@@ -39,15 +67,218 @@ function manifestFile(root: string): string {
   return path.join(root, '.platform-dna', 'install-manifest.json')
 }
 
+const profileTypes: ProfileType[] = ['docs', 'fe', 'be', 'tests']
+const sha256Pattern = /^[a-f0-9]{64}$/
+const protectedBasenames = new Set([
+  '.gitignore',
+  'package.json',
+  'pnpm-lock.yaml',
+  'package-lock.json',
+  'yarn.lock',
+  'composer.json',
+  'composer.lock',
+  'pyproject.toml',
+  'poetry.lock',
+  'mcp-package.json',
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizedRelative(value: string, label: string): string {
+  if (
+    !value ||
+    value.includes('\\') ||
+    path.posix.isAbsolute(value) ||
+    path.posix.normalize(value) !== value ||
+    value === '..' ||
+    value.startsWith('../')
+  ) {
+    throw new Error(`Invalid Platform DNA manifest ${label}: ${value}`)
+  }
+  return value
+}
+
+function isProtectedPath(relative: string): boolean {
+  const basename = path.posix.basename(relative)
+  return (
+    protectedBasenames.has(basename) ||
+    /^platform-repos(?:\..+)?\.json$/.test(basename) ||
+    /^legacy-repos(?:\..+)?\.json$/.test(basename)
+  )
+}
+
+function validateManifestFile(targetRel: string, value: unknown): InstallManifestFile {
+  const relative = normalizedRelative(targetRel, 'file path')
+  if (!relative.startsWith('.cursor/') || isProtectedPath(relative)) {
+    throw new Error(`Manifest contains a non-DNA or protected path: ${relative}`)
+  }
+  if (!isRecord(value)) throw new Error(`Invalid manifest file record: ${relative}`)
+  const source = normalizedRelative(String(value.source ?? ''), 'source path')
+  if (!/^harness\/(?:common|docs|fe|be|tests)\/.+/.test(source)) {
+    throw new Error(`Manifest contains a non-DNA source: ${source}`)
+  }
+  const expectedTarget = `.cursor/${source.split('/').slice(2).join('/')}`
+  if (expectedTarget !== relative) {
+    throw new Error(`Manifest source/target mismatch: ${source} -> ${relative}`)
+  }
+  const sha256 = String(value.sha256 ?? '')
+  if (!sha256Pattern.test(sha256)) {
+    throw new Error(`Invalid manifest sha256 for ${relative}`)
+  }
+  const state = value.state ?? 'active'
+  if (state !== 'active' && state !== 'stale') {
+    throw new Error(`Invalid manifest state for ${relative}`)
+  }
+  return { source, sha256, state }
+}
+
+export function validateInstallManifest(value: unknown): InstallManifest {
+  if (!isRecord(value)) throw new Error('Invalid Platform DNA install manifest')
+  if (value.schemaVersion !== 1) {
+    throw new Error('Unsupported Platform DNA install manifest schemaVersion')
+  }
+  if (value.package !== '@platform/platform-dna' || value.harnessApi !== 1) {
+    throw new Error('Incompatible Platform DNA install manifest')
+  }
+  if (typeof value.packageVersion !== 'string' || !value.packageVersion) {
+    throw new Error('Invalid Platform DNA install manifest packageVersion')
+  }
+  if (!profileTypes.includes(value.type as ProfileType)) {
+    throw new Error('Invalid Platform DNA install manifest type')
+  }
+  if (!isRecord(value.files)) {
+    throw new Error('Invalid Platform DNA install manifest files')
+  }
+  const files: InstallManifest['files'] = {}
+  for (const [relative, file] of Object.entries(value.files)) {
+    files[relative] = validateManifestFile(relative, file)
+  }
+  return {
+    schemaVersion: 1,
+    package: '@platform/platform-dna',
+    packageVersion: value.packageVersion,
+    type: value.type as ProfileType,
+    harnessApi: 1,
+    files,
+  }
+}
+
+export function readInstallManifest(root: string): InstallManifest | undefined {
+  const targetRoot = path.resolve(root)
+  const file = targetPath(targetRoot, '.platform-dna/install-manifest.json')
+  if (!existsSync(file)) return undefined
+  if (lstatSync(file).isSymbolicLink()) {
+    throw new Error(`Platform DNA manifest must not be a symlink: ${file}`)
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'))
+  } catch (error) {
+    throw new Error(
+      `Invalid Platform DNA install manifest JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+  }
+  return validateInstallManifest(parsed)
+}
+
+function targetPath(root: string, relative: string): string {
+  const targetRoot = path.resolve(root)
+  const target = path.resolve(targetRoot, relative)
+  if (target !== targetRoot && !target.startsWith(`${targetRoot}${path.sep}`)) {
+    throw new Error(`Platform DNA path escapes project root: ${relative}`)
+  }
+  let cursor = path.dirname(target)
+  while (cursor !== targetRoot) {
+    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+      throw new Error(`Platform DNA path crosses a symlink: ${cursor}`)
+    }
+    const parent = path.dirname(cursor)
+    if (parent === cursor) throw new Error(`Platform DNA path escapes project root: ${relative}`)
+    cursor = parent
+  }
+  return target
+}
+
+function fileStatus(root: string, relative: string, file: InstallManifestFile): HarnessFileStatus {
+  const target = targetPath(root, relative)
+  let status: HarnessFileStatus['status'] = 'missing'
+  if (existsSync(target)) {
+    status =
+      !lstatSync(target).isFile() || hash(readFileSync(target, 'utf8')) !== file.sha256
+        ? 'modified'
+        : 'unmodified'
+  }
+  return {
+    path: relative,
+    ...file,
+    status,
+    prunable: file.state === 'stale' && status === 'unmodified',
+  }
+}
+
+export function getHarnessStatus(root: string): HarnessStatus {
+  const targetRoot = path.resolve(root)
+  const manifest = readInstallManifest(targetRoot)
+  if (!manifest) throw new Error(`Platform DNA install manifest not found: ${manifestFile(targetRoot)}`)
+  return {
+    manifestPath: manifestFile(targetRoot),
+    type: manifest.type,
+    packageVersion: manifest.packageVersion,
+    files: Object.entries(manifest.files)
+      .map(([relative, file]) => fileStatus(targetRoot, relative, file))
+      .sort((left, right) => left.path.localeCompare(right.path)),
+  }
+}
+
+export function pruneHarness(opts: { root: string; yes?: boolean }): PruneHarnessResult {
+  const targetRoot = path.resolve(opts.root)
+  const manifest = readInstallManifest(targetRoot)
+  if (!manifest) throw new Error(`Platform DNA install manifest not found: ${manifestFile(targetRoot)}`)
+  const statuses = Object.entries(manifest.files).map(([relative, file]) =>
+    fileStatus(targetRoot, relative, file),
+  )
+  const prunable = statuses.filter((file) => file.prunable && !isProtectedPath(file.path))
+  const result: PruneHarnessResult = {
+    dryRun: !opts.yes,
+    planned: prunable.map((file) => targetPath(targetRoot, file.path)),
+    deleted: [],
+    skipped: statuses.filter((file) => file.state === 'stale' && !file.prunable),
+  }
+  if (!opts.yes) return result
+
+  for (const file of prunable) {
+    const target = targetPath(targetRoot, file.path)
+    // Recheck immediately before unlinking to avoid deleting a concurrently modified file.
+    if (
+      existsSync(target) &&
+      lstatSync(target).isFile() &&
+      hash(readFileSync(target, 'utf8')) === file.sha256
+    ) {
+      unlinkSync(target)
+      delete manifest.files[file.path]
+      result.deleted.push(target)
+    } else {
+      result.skipped.push(fileStatus(targetRoot, file.path, file))
+    }
+  }
+  writeFileSync(
+    targetPath(targetRoot, '.platform-dna/install-manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  )
+  return result
+}
+
 export function installHarness(opts: {
   root: string
   type: ProfileType
   force?: boolean
 }): { written: string[]; unchanged: string[]; conflicts: string[] } {
   const targetRoot = path.resolve(opts.root)
-  const previous: InstallManifest | undefined = existsSync(manifestFile(targetRoot))
-    ? (JSON.parse(readFileSync(manifestFile(targetRoot), 'utf8')) as InstallManifest)
-    : undefined
+  const previous = readInstallManifest(targetRoot)
   const roots = [
     path.join(packageRoot(), 'harness', 'common'),
     path.join(packageRoot(), 'harness', opts.type),
@@ -57,19 +288,29 @@ export function installHarness(opts: {
     unchanged: [] as string[],
     conflicts: [] as string[],
   }
-  const files: InstallManifest['files'] = {}
+  const files: InstallManifest['files'] = Object.fromEntries(
+    Object.entries(previous?.files ?? {}).map(([relative, file]) => [
+      relative,
+      { ...file, state: 'stale' as const },
+    ]),
+  )
 
   for (const sourceRoot of roots) {
     for (const source of walk(sourceRoot)) {
       const rel = path.relative(sourceRoot, source)
       const targetRel = path.join('.cursor', rel).split(path.sep).join('/')
-      const target = path.join(targetRoot, targetRel)
+      const target = targetPath(targetRoot, targetRel)
       const content = readFileSync(source, 'utf8')
       files[targetRel] = {
         source: path.relative(packageRoot(), source).split(path.sep).join('/'),
         sha256: hash(content),
+        state: 'active',
       }
       if (existsSync(target)) {
+        if (!lstatSync(target).isFile()) {
+          result.conflicts.push(target)
+          continue
+        }
         const current = readFileSync(target, 'utf8')
         if (current === content) {
           result.unchanged.push(target)
@@ -95,7 +336,8 @@ export function installHarness(opts: {
     harnessApi: 1,
     files,
   }
-  mkdirSync(path.dirname(manifestFile(targetRoot)), { recursive: true })
-  writeFileSync(manifestFile(targetRoot), `${JSON.stringify(manifest, null, 2)}\n`)
+  const installManifest = targetPath(targetRoot, '.platform-dna/install-manifest.json')
+  mkdirSync(path.dirname(installManifest), { recursive: true })
+  writeFileSync(installManifest, `${JSON.stringify(manifest, null, 2)}\n`)
   return result
 }

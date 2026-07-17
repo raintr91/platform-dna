@@ -1,6 +1,19 @@
 export { loadProfiles } from './profile/manifest.js'
 export { validateTarget } from './profile/detect.js'
-export { installHarness } from './install/harness.js'
+export {
+  getHarnessStatus,
+  installHarness,
+  pruneHarness,
+  readInstallManifest,
+  validateInstallManifest,
+} from './install/harness.js'
+export type {
+  HarnessFileStatus,
+  HarnessStatus,
+  InstallManifest,
+  InstallManifestFile,
+  PruneHarnessResult,
+} from './install/harness.js'
 export { assertPortableMap, seedProjectMaps } from './install/maps.js'
 export {
   installProfilePackages,

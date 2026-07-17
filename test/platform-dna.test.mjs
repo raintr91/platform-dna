@@ -4,13 +4,21 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
-import { installHarness } from '../dist/install/harness.js'
+import {
+  getHarnessStatus,
+  installHarness,
+  pruneHarness,
+  validateInstallManifest,
+} from '../dist/install/harness.js'
 import { assertPortableMap, seedProjectMaps } from '../dist/install/maps.js'
 import {
   installProfilePackages,
@@ -209,4 +217,143 @@ test('optional packages require declaration and install metadata', () => {
       }),
     /not an optional package/,
   )
+})
+
+test('profile switches mark old DNA assets stale and prune only unmodified files', () => {
+  const root = target('docs')
+  installHarness({ root, type: 'docs' })
+  const docsSkill = path.join(root, '.cursor/skills/platform-ai/SKILL.md')
+  assert.ok(existsSync(docsSkill))
+
+  installHarness({ root, type: 'fe' })
+  let status = getHarnessStatus(root)
+  const stale = status.files.find((file) => file.path === '.cursor/skills/platform-ai/SKILL.md')
+  assert.equal(status.type, 'fe')
+  assert.equal(stale.state, 'stale')
+  assert.equal(stale.status, 'unmodified')
+  assert.equal(stale.prunable, true)
+
+  const dryRun = pruneHarness({ root })
+  assert.equal(dryRun.dryRun, true)
+  assert.deepEqual(dryRun.planned, [docsSkill])
+  assert.ok(existsSync(docsSkill))
+
+  writeFileSync(docsSkill, `${readFileSync(docsSkill, 'utf8')}\nmember change\n`)
+  status = getHarnessStatus(root)
+  assert.equal(
+    status.files.find((file) => file.path === '.cursor/skills/platform-ai/SKILL.md').status,
+    'modified',
+  )
+  const protectedResult = pruneHarness({ root, yes: true })
+  assert.deepEqual(protectedResult.deleted, [])
+  assert.ok(existsSync(docsSkill))
+
+  installHarness({ root, type: 'docs', force: true })
+  installHarness({ root, type: 'fe' })
+  const protectedFiles = [
+    path.join(root, 'platform-repos.json'),
+    path.join(root, 'legacy-repos.local.json'),
+    path.join(root, '.gitignore'),
+    path.join(root, '.cursor/rules/specialist-package.mdc'),
+  ]
+  for (const file of protectedFiles) {
+    mkdirSync(path.dirname(file), { recursive: true })
+    writeFileSync(file, 'member or specialist owned\n')
+  }
+  const pruned = pruneHarness({ root, yes: true })
+  assert.deepEqual(pruned.deleted, [docsSkill])
+  assert.equal(existsSync(docsSkill), false)
+  for (const file of protectedFiles) assert.ok(existsSync(file))
+  assert.equal(
+    getHarnessStatus(root).files.some(
+      (file) => file.path === '.cursor/skills/platform-ai/SKILL.md',
+    ),
+    false,
+  )
+})
+
+test('manifest compatibility and path containment reject unsafe prune inputs', () => {
+  const valid = {
+    schemaVersion: 1,
+    package: '@platform/platform-dna',
+    packageVersion: '0.1.2',
+    type: 'docs',
+    harnessApi: 1,
+    files: {},
+  }
+  assert.doesNotThrow(() => validateInstallManifest(valid))
+  assert.throws(
+    () => validateInstallManifest({ ...valid, schemaVersion: 2 }),
+    /schemaVersion/,
+  )
+  assert.throws(
+    () =>
+      validateInstallManifest({
+        ...valid,
+        files: {
+          '../.gitignore': {
+            source: 'harness/docs/rules/platform-ai.mdc',
+            sha256: '0'.repeat(64),
+            state: 'stale',
+          },
+        },
+      }),
+    /file path/,
+  )
+  assert.throws(
+    () =>
+      validateInstallManifest({
+        ...valid,
+        files: {
+          'platform-repos.json': {
+            source: 'harness/docs/rules/platform-ai.mdc',
+            sha256: '0'.repeat(64),
+            state: 'stale',
+          },
+        },
+      }),
+    /non-DNA or protected path/,
+  )
+
+  const root = target('docs')
+  installHarness({ root, type: 'docs' })
+  const outside = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-outside-'))
+  const cursor = path.join(root, '.cursor')
+  const movedCursor = path.join(root, '.cursor-real')
+  renameSync(cursor, movedCursor)
+  symlinkSync(outside, cursor)
+  assert.throws(() => getHarnessStatus(root), /crosses a symlink/)
+})
+
+test('CLI status and dry-run-by-default prune expose managed lifecycle', () => {
+  const root = target('docs')
+  installHarness({ root, type: 'docs' })
+  installHarness({ root, type: 'tests' })
+  const docsSkill = path.join(root, '.cursor/skills/platform-ai/SKILL.md')
+
+  const status = spawnSync(
+    process.execPath,
+    ['dist/cli.js', 'status', '--project-root', root],
+    { cwd: path.resolve('.'), encoding: 'utf8' },
+  )
+  assert.equal(status.status, 0, status.stderr)
+  assert.match(status.stdout, /"state": "stale"/)
+  assert.match(status.stdout, /"prunable": true/)
+
+  const dryRun = spawnSync(
+    process.execPath,
+    ['dist/cli.js', 'prune', '--project-root', root],
+    { cwd: path.resolve('.'), encoding: 'utf8' },
+  )
+  assert.equal(dryRun.status, 0, dryRun.stderr)
+  assert.match(dryRun.stdout, /dry-run \(pass --yes to delete\)/)
+  assert.ok(existsSync(docsSkill))
+
+  const apply = spawnSync(
+    process.execPath,
+    ['dist/cli.js', 'prune', '--project-root', root, '--yes'],
+    { cwd: path.resolve('.'), encoding: 'utf8' },
+  )
+  assert.equal(apply.status, 0, apply.stderr)
+  assert.equal(existsSync(docsSkill), false)
 })

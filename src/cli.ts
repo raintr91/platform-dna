@@ -7,7 +7,11 @@ import {
 } from './config/project-root.js'
 import { loadProfiles } from './profile/manifest.js'
 import { validateTarget } from './profile/detect.js'
-import { installHarness } from './install/harness.js'
+import {
+  getHarnessStatus,
+  installHarness,
+  pruneHarness,
+} from './install/harness.js'
 import { assertPortableMap, seedProjectMaps } from './install/maps.js'
 import {
   installProfilePackages,
@@ -56,6 +60,8 @@ function usage(): never {
        [--project-root <path>] [--repo-name <id>] [--repo-url <url>]
        [--package-root packageId=/path] [--no-install] [--force] [--dry-run] [--yes]
   validate --type=… [--adapter=…] [--project-root <path>]
+  status [--project-root <path>]
+  prune [--project-root <path>] [--yes] [--dry-run]
   profile --type=…
   version
 
@@ -75,10 +81,24 @@ async function main(): Promise<void> {
     return
   }
 
+  const root = resolveProjectRoot(arg('--project-root'))
+  if (command === 'status') {
+    console.log(JSON.stringify(getHarnessStatus(root), null, 2))
+    return
+  }
+  if (command === 'prune') {
+    const result = pruneHarness({
+      root,
+      yes: has('--yes') && !has('--dry-run'),
+    })
+    console.log(JSON.stringify(result, null, 2))
+    if (result.dryRun) console.log('platform-dna prune: dry-run (pass --yes to delete)')
+    return
+  }
+
   const manifest = loadProfiles()
   const type = resolveType(arg('--type'))
   const profile = manifest.profiles[type]
-  const root = resolveProjectRoot(arg('--project-root'))
   const adapter = arg('--adapter')
 
   if (command === 'profile') {

@@ -8,6 +8,9 @@ platform-dna init --type=docs --project-root=/path/to/base-docs --yes
 platform-dna init --type=fe --adapter=nuxt4 --project-root=/path/to/portal --yes
 platform-dna init --type=be --adapter=laravel --project-root=/path/to/api --yes
 platform-dna init --type=tests --project-root=/path/to/base-tests --yes
+platform-dna status --project-root=/path/to/hub
+platform-dna prune --project-root=/path/to/hub        # dry-run
+platform-dna prune --project-root=/path/to/hub --yes  # delete safe stale files
 ```
 
 The resolver installs missing required packages under
@@ -30,6 +33,14 @@ Safety:
 - Committed project maps containing sibling or machine paths are rejected.
 - `*.local.json` remains member-owned and is added to `.gitignore`.
 - `--dry-run` prints package invocations without writing or cloning.
+- `.platform-dna/install-manifest.json` tracks active and stale Platform-DNA-owned
+  harness files. Switching among `docs`, `fe`, `be`, and `tests` marks old
+  profile-only assets stale.
+- `status` reports missing, modified, and unmodified managed files. `prune` is
+  dry-run by default and deletes only stale files whose current SHA-256 still
+  matches the install manifest; use `--yes` to apply.
+- Pruning never considers project maps, `.gitignore`, specialist package files,
+  or any path absent from the validated Platform DNA install manifest.
 
 See [docs/PROFILES.md](./docs/PROFILES.md) and
 [docs/PROJECT-MAPS.md](./docs/PROJECT-MAPS.md).
