@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "package": "@platform/platform-dna",
-  "version": "0.1.0",
-  "types": ["docs", "fe", "be", "tests", "tooling"],
+  "version": "0.1.1",
+  "types": ["docs", "fe", "be", "tests"],
   "requires": [],
   "optional": [],
   "tools": [],

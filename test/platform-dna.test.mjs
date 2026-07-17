@@ -138,24 +138,44 @@ test('non-portable committed maps are rejected; local maps are ignored', () => {
   assert.doesNotThrow(() => assertPortableMap(path.join(root, 'missing.json')))
 })
 
-test('tooling profile is package-only and does not select lane packages', () => {
-  const ids = resolvePackageSet({
-    manifest,
-    type: 'tooling',
-    packages: ['bundlekit', 'processkit'],
-  })
-  assert.deepEqual(ids, ['bundlekit', 'processkit'])
-  const plan = installProfilePackages({
-    manifest,
-    type: 'tooling',
-    packageIds: ids,
-    projectRoot: process.cwd(),
-    dryRun: true,
-  })
-  assert.deepEqual(
-    plan.map((step) => step.argv),
-    [['version'], ['version']],
+test('rejects MCP tooling package repos and the removed tooling profile', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-mcp-'))
+  writeFileSync(
+    path.join(root, 'mcp-package.json'),
+    JSON.stringify({ package: '@platform/hubdocs', types: ['docs'] }),
   )
+  assert.throws(
+    () =>
+      validateTarget({
+        root,
+        type: 'docs',
+        profile: manifest.profiles.docs,
+      }),
+    /MCP package|MCP tooling/,
+  )
+  writeFileSync(
+    path.join(root, 'platform-repos.json'),
+    JSON.stringify({
+      projects: { hubdocs: { root: '.', role: 'tooling' } },
+    }),
+  )
+  const toolingRoot = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-role-'))
+  writeFileSync(
+    path.join(toolingRoot, 'platform-repos.json'),
+    JSON.stringify({
+      projects: { hubdocs: { root: '.', role: 'tooling' } },
+    }),
+  )
+  assert.throws(
+    () =>
+      validateTarget({
+        root: toolingRoot,
+        type: 'docs',
+        profile: manifest.profiles.docs,
+      }),
+    /role=tooling/,
+  )
+  assert.equal(manifest.profiles.tooling, undefined)
 })
 
 test('optional packages require declaration and install metadata', () => {

@@ -25,11 +25,6 @@
       "required": ["testkit"],
       "optional": ["artifactgraph"],
       "repoMarkers": ["cases", "tests", "package.json"]
-    },
-    "tooling": {
-      "required": [],
-      "optional": [],
-      "repoMarkers": []
     }
   },
   "packages": {

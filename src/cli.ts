@@ -55,12 +55,12 @@ function usage(): never {
   init --type=docs|fe|be|tests [--adapter=…] [--with=artifactgraph]
        [--project-root <path>] [--repo-name <id>] [--repo-url <url>]
        [--package-root packageId=/path] [--no-install] [--force] [--dry-run] [--yes]
-  init --type=tooling --packages=bundlekit,processkit [--package-root …]
   validate --type=… [--adapter=…] [--project-root <path>]
   profile --type=…
   version
 
-Platform DNA owns profile resolution, portable maps and the meta harness.
+Platform DNA installs only into docs/code hubs (docs · fe · be · tests).
+Never init into MCP tooling repos (hubdocs, bundlekit, …).
 Specialist skills/tools remain owned by their package.
 `)
   process.exit(1)
@@ -106,7 +106,6 @@ async function main(): Promise<void> {
     manifest,
     type,
     withOptional: list('--with'),
-    packages: list('--packages'),
   })
   if (has('--dry-run')) {
     const plan = installProfilePackages({

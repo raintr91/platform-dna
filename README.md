@@ -1,6 +1,7 @@
 # Platform DNA
 
-Profile resolver and meta-harness bootstrap for Platform AI repositories.
+Profile resolver and meta-harness bootstrap for **docs and code hubs**
+(`docs` · `fe` · `be` · `tests`). Never install into MCP tooling repos.
 
 ```bash
 platform-dna init --type=docs --project-root=/path/to/base-docs --yes
@@ -25,6 +26,7 @@ Safety:
 
 - FE/BE require an explicit adapter.
 - A declared or detected lane mismatch fails unless `--force` is explicit.
+- Targets with `mcp-package.json` or `role=tooling` are rejected (DNA is not for MCP repos).
 - Committed project maps containing sibling or machine paths are rejected.
 - `*.local.json` remains member-owned and is added to `.gitignore`.
 - `--dry-run` prints package invocations without writing or cloning.

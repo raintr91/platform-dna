@@ -112,11 +112,9 @@ export function resolvePackageSet(opts: {
   manifest: ProfilesManifest
   type: ProfileType
   withOptional?: string[]
-  packages?: string[]
 }): string[] {
   const profile = opts.manifest.profiles[opts.type]
-  const requested =
-    opts.type === 'tooling' ? (opts.packages ?? []) : [...profile.required]
+  const requested = [...profile.required]
   for (const id of opts.withOptional ?? []) {
     if (!profile.optional.includes(id)) {
       throw new Error(`${id} is not an optional package for profile ${opts.type}`)
@@ -148,13 +146,10 @@ export function installProfilePackages(opts: {
         `Package ${id} has no install metadata; install it separately or add it to profiles.json`,
       )
     }
-    if (!pkg.types.includes(opts.type) && opts.type !== 'tooling') {
+    if (!pkg.types.includes(opts.type)) {
       throw new Error(`Package ${id} does not support profile ${opts.type}`)
     }
-    const invocations =
-      opts.type === 'tooling'
-        ? ([['version']] as string[][])
-        : (pkg.invocations[opts.type] ?? [])
+    const invocations = pkg.invocations[opts.type] ?? []
     const expanded = invocations.map((argv) =>
       expand(argv, {
         projectRoot: opts.projectRoot,

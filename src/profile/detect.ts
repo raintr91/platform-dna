@@ -35,8 +35,18 @@ export function validateTarget(opts: {
   adapter?: string
   force?: boolean
 }): void {
-  if (opts.type === 'tooling') return
+  // Platform DNA bootstraps docs/code hubs only — never MCP package repos.
+  if (existsSync(path.join(opts.root, 'mcp-package.json')) && !opts.force) {
+    throw new Error(
+      'Target looks like an MCP package (mcp-package.json present); Platform DNA installs only into docs/fe/be/tests hubs — not into MCP tooling repos',
+    )
+  }
   const role = normalizeRole(declaredRole(opts.root))
+  if (role === 'tooling' && !opts.force) {
+    throw new Error(
+      'Repository declares role=tooling; Platform DNA does not install into MCP tooling repos',
+    )
+  }
   if (role && role !== opts.type && !opts.force) {
     throw new Error(
       `Repository declares role=${role}, not ${opts.type}; use the correct --type or explicit --force`,

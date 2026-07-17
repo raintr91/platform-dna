@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-export type ProfileType = 'docs' | 'fe' | 'be' | 'tests' | 'tooling'
+/** Product hubs only — never MCP tooling packages. */
+export type ProfileType = 'docs' | 'fe' | 'be' | 'tests'
 
 export function packageRoot(): string {
   return root
@@ -26,8 +27,8 @@ export function resolveProjectRoot(explicit?: string): string {
 
 export function resolveType(value?: string): ProfileType {
   const type = value ?? 'docs'
-  if (!['docs', 'fe', 'be', 'tests', 'tooling'].includes(type)) {
-    throw new Error('--type must be docs | fe | be | tests | tooling')
+  if (!['docs', 'fe', 'be', 'tests'].includes(type)) {
+    throw new Error('--type must be docs | fe | be | tests (docs/code hubs only; not MCP packages)')
   }
   return type as ProfileType
 }
