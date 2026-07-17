@@ -1,0 +1,15 @@
+---
+description: Same keys FE/API/BE/DB — load on contract edit lanes
+globs: models/**/*,validations/**/*,services/**/*,composables/**/*,stores/**/*
+alwaysApply: false
+---
+
+# Contract Naming
+
+Same keys across FE schema, service params, API, BE DTO, DB, pivot payloads.
+
+Cross-repo only when `platform-repos` has `groups.*.contract` `{ frontend, backend }` — resolve those two roots only. Never paste full map.
+
+- No rename layers (`content` not `content_blog`)
+- No flatten `auth: { id, name }` → `auth_id`, `auth_name`
+- M-N under relationship keys; third-party mapping only at adapter + documented reason

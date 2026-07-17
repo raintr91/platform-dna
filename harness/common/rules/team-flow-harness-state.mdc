@@ -1,0 +1,12 @@
+---
+description: Harness progress handoff protocol shared by every lane
+globs: .harness/**/*
+alwaysApply: false
+---
+
+# Harness state
+
+- `.harness/progress.md` records command, changed files, verification and blockers.
+- `.harness/feature_list.json` records scope; never mark complete without evidence.
+- Load only skills installed in the current repository.
+- Never resolve or write through an inferred sibling checkout.

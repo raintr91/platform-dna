@@ -1,0 +1,11 @@
+---
+description: Platform AI — backend lane boundary and portability
+alwaysApply: true
+---
+
+# Platform AI — backend
+
+- Current repository is the BE implementation lane.
+- `/api`, `/grill-api`, and impact review are local when installed.
+- FE/docs/tests work remains a handoff; never infer sibling checkout paths.
+- Adapter selection is explicit (`fastapi` or `laravel`); do not mix stack rules.

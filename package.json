@@ -1,0 +1,39 @@
+{
+  "name": "@platform/platform-dna",
+  "version": "0.1.0",
+  "description": "Platform AI profile resolver and portable harness bootstrap",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "platform-dna": "./bin/platform-dna.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raintr91/platform-dna.git"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "docs",
+    "harness",
+    "profiles.json",
+    "templates",
+    "mcp-package.json",
+    "README.md",
+    "install.sh",
+    "install.ps1"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,14 @@
+---
+description: Command router — BE lane, installed skills only
+alwaysApply: false
+---
+
+# Team AI Flow — BE
+
+| Command | Owner |
+|---------|-------|
+| `/api` `/grill-api` | Codegenkit BE |
+| `/business-impact-review` | Processkit BE |
+
+FE, tests, and docs authoring are handoffs. The selected backend adapter defines
+the executable generator and stack rules.

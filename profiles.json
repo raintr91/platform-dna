@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "docs": {
+      "required": ["hubdocs", "bundlekit", "processkit"],
+      "optional": ["artifactgraph", "codegraph"],
+      "repoMarkers": ["architecture", "product"],
+      "ownedSkills": ["platform-ai"]
+    },
+    "fe": {
+      "required": ["codegenkit", "testkit", "processkit"],
+      "optional": ["artifactgraph", "codegraph", "hubdocs"],
+      "requiresAdapter": true,
+      "adapters": ["nuxt4", "nextjs"],
+      "repoMarkers": ["package.json"]
+    },
+    "be": {
+      "required": ["codegenkit", "processkit"],
+      "optional": ["artifactgraph", "codegraph", "hubdocs"],
+      "requiresAdapter": true,
+      "adapters": ["fastapi", "laravel"],
+      "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json"]
+    },
+    "tests": {
+      "required": ["testkit"],
+      "optional": ["artifactgraph"],
+      "repoMarkers": ["cases", "tests", "package.json"]
+    },
+    "tooling": {
+      "required": [],
+      "optional": [],
+      "repoMarkers": []
+    }
+  },
+  "packages": {
+    "hubdocs": {
+      "repository": "https://github.com/raintr91/hubdocs.git",
+      "command": "hubdocs",
+      "bin": "bin/hubdocs.mjs",
+      "types": ["docs"],
+      "invocations": {
+        "docs": [
+          ["init", "--target=cursor", "--location=local", "--yes", "--docs-root={projectRoot}"],
+          ["harness", "install", "--project-root={projectRoot}", "{force}"]
+        ]
+      }
+    },
+    "bundlekit": {
+      "repository": "https://github.com/raintr91/Bundlekit.git",
+      "command": "bundlekit",
+      "bin": "bin/bundlekit.mjs",
+      "types": ["docs"],
+      "invocations": {
+        "docs": [["init", "--type=docs", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]]
+      }
+    },
+    "processkit": {
+      "repository": "https://github.com/raintr91/Processkit.git",
+      "command": "processkit",
+      "bin": "bin/processkit.mjs",
+      "types": ["docs", "fe", "be"],
+      "invocations": {
+        "docs": [["init", "--type=docs", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "fe": [["init", "--type=fe", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "be": [["init", "--type=be", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]]
+      }
+    },
+    "codegenkit": {
+      "repository": "https://github.com/raintr91/codegenkit.git",
+      "command": "codegenkit",
+      "bin": "bin/codegenkit.mjs",
+      "types": ["fe", "be"],
+      "invocations": {
+        "fe": [["init", "--type=fe", "--adapter={adapter}", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "be": [["init", "--type=be", "--adapter={adapter}", "--yes", "--project-root={projectRoot}", "{force}"]]
+      }
+    },
+    "testkit": {
+      "repository": "https://github.com/raintr91/Testkit.git",
+      "command": "testkit",
+      "bin": "bin/testkit.mjs",
+      "types": ["fe", "tests"],
+      "invocations": {
+        "fe": [["init", "--type=fe", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "tests": [["init", "--type=tests", "--yes", "--project-root={projectRoot}", "{force}"]]
+      }
+    },
+    "artifactgraph": {
+      "repository": "https://github.com/raintr91/artifactgraph.git",
+      "command": "artifactgraph",
+      "bin": "bin/artifactgraph.mjs",
+      "types": ["docs", "fe", "be", "tests"],
+      "invocations": {
+        "docs": [["init", "--type=common,docs", "--target=cursor", "--location=local", "--yes"]],
+        "fe": [["init", "--type=common,fe", "--target=cursor", "--location=local", "--yes"]],
+        "be": [["init", "--type=common,be", "--target=cursor", "--location=local", "--yes"]],
+        "tests": [["init", "--type=common,test", "--target=cursor", "--location=local", "--yes"]]
+      }
+    }
+  }
+}

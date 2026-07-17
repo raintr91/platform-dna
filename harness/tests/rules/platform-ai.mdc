@@ -1,0 +1,11 @@
+---
+description: Platform AI — tests/plans lane boundary and portability
+alwaysApply: true
+---
+
+# Platform AI — tests
+
+- Current repository owns testcase plans and suites.
+- Playwright implementation belongs to FE; product design belongs to docs.
+- Never infer docs/FE sibling checkout paths.
+- Use only Testkit skills installed for the `tests` profile.

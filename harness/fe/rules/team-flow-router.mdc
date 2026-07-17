@@ -1,0 +1,15 @@
+---
+description: Command router — FE lane, installed skills only
+alwaysApply: false
+---
+
+# Team AI Flow — FE
+
+| Command | Owner |
+|---------|-------|
+| `/prototype` `/wire` `/unit` `/grill-prototype` `/grill-unit` | Codegenkit FE |
+| `/test` `/grill-test` | Testkit FE |
+| `/business-impact-review` | Processkit FE |
+
+Design/spec and backend API authoring are handoffs. Do not load their skills
+unless another package explicitly installed them into this repository.

@@ -1,0 +1,12 @@
+---
+description: Platform AI — docs lane boundary and portability
+alwaysApply: true
+---
+
+# Platform AI — docs
+
+- Current repository is the docs lane.
+- Architecture/spec/process documentation skills only.
+- FE/BE/tests work is a handoff to its published repository; never infer siblings.
+- Repository files use portable root-relative paths or canonical online links.
+- `/platform-ai` owns harness maintenance for this lane.

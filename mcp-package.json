@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "package": "@platform/platform-dna",
+  "version": "0.1.0",
+  "types": ["docs", "fe", "be", "tests", "tooling"],
+  "requires": [],
+  "optional": [],
+  "tools": [],
+  "skillsByType": {
+    "docs": ["platform-ai"],
+    "fe": [],
+    "be": [],
+    "tests": []
+  },
+  "ownedRules": [
+    "platform-ai.mdc",
+    "team-flow-router.mdc",
+    "team-flow-harness-state.mdc",
+    "platform-contract-naming.mdc"
+  ],
+  "compatibility": {
+    "node": ">=22",
+    "toolApi": 1,
+    "harnessApi": 1
+  }
+}

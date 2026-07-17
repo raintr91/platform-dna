@@ -1,0 +1,11 @@
+---
+description: Platform AI — frontend lane boundary and portability
+alwaysApply: true
+---
+
+# Platform AI — frontend
+
+- Current repository is the FE implementation lane.
+- Installed Codegenkit/Testkit/Processkit skills are local; docs and BE authoring are handoffs.
+- Read external docs/tests roots only when explicitly configured.
+- Never infer sibling checkout paths or load docs/BE skill families into this lane.
