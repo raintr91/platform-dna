@@ -32,6 +32,8 @@ Flow: `platform/toolchain/FEATURE-ARTIFACT-FLOWS.md` · `TESTS-HUB.md` · router
 
 ## Done
 
-- [ ] Docs skills/extracts đúng hub paths
-- [ ] Docs-tier skills không bị lẫn FE/Plans/BE skills
-- [ ] Không còn path/link phụ thuộc layout máy hoặc sibling repo
+- [x] Docs skills/extracts đúng hub paths và có một package owner
+- [x] Docs profile không lẫn FE/BE/tests assets; MCP repos không nhận Platform DNA
+- [x] Committed maps chỉ chứa current repo/lane; không phụ thuộc sibling/machine path
+- [x] Mỗi package có manifest hash, `status` và dry-run `prune --yes` an toàn
+- [x] Optional accelerators có namespaced fallback contract, dedup event và metrics thực

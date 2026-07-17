@@ -1,6 +1,6 @@
 {
   "name": "@platform/platform-dna",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Platform AI profile resolver and portable harness bootstrap",
   "type": "module",
   "main": "./dist/index.js",

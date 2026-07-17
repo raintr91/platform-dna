@@ -80,6 +80,11 @@ test('profile manifest freezes required package sets and supported adapters', ()
     ),
     false,
   )
+  const docsMetaSkill = readFileSync(
+    path.resolve('harness/docs/skills/platform-ai/SKILL.md'),
+    'utf8',
+  )
+  assert.doesNotMatch(docsMetaSkill, /- \[ \]/)
 })
 
 for (const [type, adapter] of [
