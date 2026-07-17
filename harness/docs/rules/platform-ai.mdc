@@ -6,7 +6,10 @@ alwaysApply: true
 # Platform AI — docs
 
 - Current repository is the docs lane.
-- Architecture/spec/process documentation skills only.
+- Harness SSOT is `.cursor/` in this repository; architecture/spec/process
+  documentation skills only.
+- Product Code IR lives under `product/`; docs renderers never emit tests-hub
+  plans.
 - FE/BE/tests work is a handoff to its published repository; never infer siblings.
 - Repository files use portable root-relative paths or canonical online links.
 - `/platform-ai` owns harness maintenance for this lane.

@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$HOME\.platform-dna\bootstrap",
-  [string]$Ref = "main"
+  [string]$Ref = "v0.1.5"
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,7 +15,7 @@ if (Get-Command pnpm -ErrorAction SilentlyContinue) {
   pnpm install --frozen-lockfile
   pnpm build
 } else {
-  npm install
+  npm ci
   npm run build
 }
 Pop-Location

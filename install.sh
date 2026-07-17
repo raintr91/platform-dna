@@ -4,7 +4,7 @@ set -euo pipefail
 REPO="${PLATFORM_DNA_REPO:-raintr91/platform-dna}"
 INSTALL_DIR="${PLATFORM_DNA_INSTALL_DIR:-$HOME/.platform-dna/bootstrap}"
 BIN_DIR="${PLATFORM_DNA_BIN_DIR:-$HOME/.local/bin}"
-REF="${PLATFORM_DNA_REF:-main}"
+REF="${PLATFORM_DNA_REF:-v0.1.5}"
 
 command -v node >/dev/null
 command -v git >/dev/null
@@ -19,7 +19,7 @@ if command -v pnpm >/dev/null; then
   pnpm install --frozen-lockfile
   pnpm build
 else
-  npm install
+  npm ci
   npm run build
 fi
 ln -sf "$INSTALL_DIR/bin/platform-dna.mjs" "$BIN_DIR/platform-dna"

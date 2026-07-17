@@ -362,3 +362,15 @@ test('CLI status and dry-run-by-default prune expose managed lifecycle', () => {
   assert.equal(apply.status, 0, apply.stderr)
   assert.equal(existsSync(docsSkill), false)
 })
+
+test('installers pin the immutable release and enforce lockfiles', () => {
+  for (const script of [
+    readFileSync('install.sh', 'utf8'),
+    readFileSync('install.ps1', 'utf8'),
+  ]) {
+    assert.match(script, /v0\.1\.5/)
+    assert.match(script, /pnpm install --frozen-lockfile/)
+    assert.match(script, /npm ci/)
+    assert.doesNotMatch(script, /(?:REF:-main|Ref = "main")/)
+  }
+})
