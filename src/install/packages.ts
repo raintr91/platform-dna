@@ -96,10 +96,18 @@ function resolveExecutable(opts: {
 
 function expand(
   values: string[],
-  vars: { projectRoot: string; adapter?: string; force?: boolean },
+  vars: {
+    projectRoot: string
+    adapter?: string
+    docsRoot?: string
+    force?: boolean
+  },
 ): string[] {
   return values.flatMap((value) => {
     if (value === '{force}') return vars.force ? ['--force'] : []
+    if (value === '{docsRootArg}') {
+      return vars.docsRoot ? [`--docs-root=${path.resolve(vars.docsRoot)}`] : []
+    }
     return [
       value
         .replaceAll('{projectRoot}', vars.projectRoot)
@@ -135,6 +143,7 @@ export function installProfilePackages(opts: {
   packageIds: string[]
   projectRoot: string
   adapter?: string
+  docsRoot?: string
   force?: boolean
   installMissing?: boolean
   packageRoots?: Record<string, string>
@@ -159,6 +168,7 @@ export function installProfilePackages(opts: {
       expand(argv, {
         projectRoot: opts.projectRoot,
         adapter: opts.adapter,
+        docsRoot: opts.docsRoot,
         force: opts.force,
       }),
     )

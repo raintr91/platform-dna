@@ -24,6 +24,22 @@ specialist package remains independently installable and runs standalone;
 Platform DNA only coordinates installation and selected-profile initialization
 for docs/code hubs.
 
+## Docs registry pointer
+
+The docs repo is the canonical registry/architecture hub. For FE bootstrap,
+pass a member-selected machine-local pointer:
+
+```bash
+platform-dna init --type=fe --adapter=nuxt4 \
+  --docs-root=/absolute/path/to/docs-hub --yes
+```
+
+Platform DNA forwards it to Codegenkit (`CODEGENKIT_DOCS_ROOT`) and Testkit.
+When optional Hubdocs is selected (`--with=hubdocs`), it wires
+`HUBDOCS_ROOT` to the same docs repo and installs only the lightweight
+`consumer` harness. ArtifactGraph stays docs-first; FE/BE installs are
+local-only hints and do not follow this pointer.
+
 ## Profile lifecycle
 
 Each successful harness install writes `.platform-dna/install-manifest.json`.

@@ -247,6 +247,33 @@ test('optional packages require declaration and install metadata', () => {
   )
 })
 
+test('FE docs pointer is forwarded to Codegenkit and Hubdocs consumer profile', () => {
+  const root = target('fe', 'nuxt4')
+  const docsRoot = target('docs')
+  const packageIds = resolvePackageSet({
+    manifest,
+    type: 'fe',
+    adapter: 'nuxt4',
+    withOptional: ['hubdocs'],
+  })
+  const plan = installProfilePackages({
+    manifest,
+    type: 'fe',
+    packageIds,
+    projectRoot: root,
+    adapter: 'nuxt4',
+    docsRoot,
+    dryRun: true,
+  })
+
+  const codegen = plan.find((step) => step.packageId === 'codegenkit')
+  assert.ok(codegen.argv.includes(`--docs-root=${docsRoot}`))
+  const hubdocs = plan.filter((step) => step.packageId === 'hubdocs')
+  assert.equal(hubdocs.length, 2)
+  assert.ok(hubdocs[0].argv.includes(`--docs-root=${docsRoot}`))
+  assert.ok(hubdocs[1].argv.includes('--type=consumer'))
+})
+
 test('dotnet adapters validate and drop Testkit from Line FE recommended set', () => {
   const line = target('fe', 'dotnet-line')
   validateTarget({

@@ -33,11 +33,23 @@
       "repository": "https://github.com/raintr91/hubdocs.git",
       "command": "hubdocs",
       "bin": "bin/hubdocs.mjs",
-      "types": ["docs"],
+      "types": ["docs", "fe", "be", "tests"],
       "invocations": {
         "docs": [
           ["init", "--target=cursor", "--location=local", "--yes", "--docs-root={projectRoot}"],
-          ["harness", "install", "--project-root={projectRoot}", "{force}"]
+          ["harness", "install", "--type=docs", "--project-root={projectRoot}", "{force}"]
+        ],
+        "fe": [
+          ["init", "--target=cursor", "--location=local", "--yes", "{docsRootArg}"],
+          ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
+        ],
+        "be": [
+          ["init", "--target=cursor", "--location=local", "--yes", "{docsRootArg}"],
+          ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
+        ],
+        "tests": [
+          ["init", "--target=cursor", "--location=local", "--yes", "{docsRootArg}"],
+          ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
         ]
       }
     },
@@ -67,7 +79,7 @@
       "bin": "bin/codegenkit.mjs",
       "types": ["fe", "be"],
       "invocations": {
-        "fe": [["init", "--type=fe", "--adapter={adapter}", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "fe": [["init", "--type=fe", "--adapter={adapter}", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
         "be": [["init", "--type=be", "--adapter={adapter}", "--yes", "--project-root={projectRoot}", "{force}"]]
       }
     },
@@ -77,7 +89,7 @@
       "bin": "bin/testkit.mjs",
       "types": ["fe", "tests"],
       "invocations": {
-        "fe": [["init", "--type=fe", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "fe": [["init", "--type=fe", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
         "tests": [["init", "--type=tests", "--yes", "--project-root={projectRoot}", "{force}"]]
       }
     },

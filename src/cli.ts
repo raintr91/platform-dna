@@ -57,7 +57,8 @@ function usage(): never {
   console.log(`platform-dna ${packageVersion()}
 
   init --type=docs|fe|be|tests [--adapter=…] [--with=artifactgraph]
-       [--project-root <path>] [--repo-name <id>] [--repo-url <url>]
+       [--project-root <path>] [--docs-root <path>]
+       [--repo-name <id>] [--repo-url <url>]
        [--package-root packageId=/path] [--no-install] [--force] [--dry-run] [--yes]
   validate --type=… [--adapter=…] [--project-root <path>]
   status [--project-root <path>]
@@ -100,6 +101,7 @@ async function main(): Promise<void> {
   const type = resolveType(arg('--type'))
   const profile = manifest.profiles[type]
   const adapter = arg('--adapter')
+  const docsRoot = arg('--docs-root')
 
   if (command === 'profile') {
     console.log(JSON.stringify({ type, ...profile }, null, 2))
@@ -135,10 +137,13 @@ async function main(): Promise<void> {
       packageIds,
       projectRoot: root,
       adapter,
+      docsRoot,
       force: has('--force'),
       dryRun: true,
     })
-    console.log(JSON.stringify({ type, root, adapter, packageIds, invocations: plan }, null, 2))
+    console.log(
+      JSON.stringify({ type, root, adapter, docsRoot, packageIds, invocations: plan }, null, 2),
+    )
     return
   }
 
@@ -168,6 +173,7 @@ async function main(): Promise<void> {
     packageIds,
     projectRoot: root,
     adapter,
+    docsRoot,
     force: has('--force'),
     installMissing: !has('--no-install'),
     packageRoots: packageRoots(),
