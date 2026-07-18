@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "profiles": {
     "docs": {
-      "required": ["hubdocs", "bundlekit", "processkit"],
+      "recommended": ["hubdocs", "bundlekit", "processkit"],
       "optional": ["artifactgraph", "codegraph"],
       "repoMarkers": ["architecture", "product"],
       "ownedSkills": ["platform-ai"]
     },
     "fe": {
-      "required": ["codegenkit", "testkit", "processkit"],
+      "recommended": ["codegenkit", "testkit", "processkit"],
       "optional": ["artifactgraph", "codegraph", "hubdocs"],
       "requiresAdapter": true,
       "adapters": ["nuxt4", "nextjs", "dotnet-line"],
@@ -16,14 +16,14 @@
       "ownedSkills": ["platform-base"]
     },
     "be": {
-      "required": ["codegenkit", "processkit"],
+      "recommended": ["codegenkit", "processkit"],
       "optional": ["artifactgraph", "codegraph", "hubdocs"],
       "requiresAdapter": true,
       "adapters": ["fastapi", "laravel", "dotnet-integration"],
       "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json", "*.sln"]
     },
     "tests": {
-      "required": ["testkit"],
+      "recommended": ["testkit"],
       "optional": ["artifactgraph"],
       "repoMarkers": ["cases", "tests", "package.json"]
     }

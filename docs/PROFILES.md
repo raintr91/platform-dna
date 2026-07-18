@@ -5,22 +5,24 @@
 Platform DNA installs **only** into product hubs (`docs` · `fe` · `be` · `tests`).
 It does **not** install into MCP tooling repos (`hubdocs`, `bundlekit`, …).
 
-| Type | Required packages | Adapter |
-|------|-------------------|---------|
+| Type | Recommended kits (installed by the bundle) | Adapter |
+|------|--------------------------------------------|---------|
 | `docs` | Hubdocs, Bundlekit, Processkit | — |
 | `fe` | Codegenkit, Testkit, Processkit | `nuxt4`, `nextjs`, or `dotnet-line` |
 | `be` | Codegenkit, Processkit | `fastapi`, `laravel`, or `dotnet-integration` |
 | `tests` | Testkit | — |
 
-`dotnet-line` drops Testkit from the required set (no web E2E consumption lane).
+`dotnet-line` drops Testkit from the recommended set (no web E2E consumption lane).
 FE DNA owns `/platform-base` for `nuxt4` / `nextjs` adapters only (not `dotnet-line`).
 
 Optional packages are installed only through `--with`. An optional package
 without install metadata fails with an actionable message; it is never silently
-treated as required.
+promoted into the recommended set.
 
-Every specialist package remains independently installable. Platform DNA only
-coordinates installation and selected-profile initialization for docs/code hubs.
+Recommended kits are a convenience bundle, not runtime dependencies. Every
+specialist package remains independently installable and runs standalone;
+Platform DNA only coordinates installation and selected-profile initialization
+for docs/code hubs.
 
 ## Profile lifecycle
 

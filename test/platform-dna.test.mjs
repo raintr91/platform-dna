@@ -69,8 +69,8 @@ function target(type, adapter) {
   return root
 }
 
-test('profile manifest freezes required package sets and supported adapters', () => {
-  assert.deepEqual(manifest.profiles.docs.required, [
+test('profile manifest freezes recommended package sets and supported adapters', () => {
+  assert.deepEqual(manifest.profiles.docs.recommended, [
     'hubdocs',
     'bundlekit',
     'processkit',
@@ -85,7 +85,7 @@ test('profile manifest freezes required package sets and supported adapters', ()
     'laravel',
     'dotnet-integration',
   ])
-  assert.deepEqual(manifest.profiles.tests.required, ['testkit'])
+  assert.deepEqual(manifest.profiles.tests.recommended, ['testkit'])
   const schema = JSON.parse(
     readFileSync(
       path.resolve('templates/schemas/platform-repos.schema.json'),
@@ -134,7 +134,7 @@ for (const [type, adapter] of [
       type === 'fe' && (adapter === 'nuxt4' || adapter === 'nextjs'),
     )
     const ids = resolvePackageSet({ manifest, type })
-    assert.deepEqual(ids, manifest.profiles[type].required)
+    assert.deepEqual(ids, manifest.profiles[type].recommended)
     const plan = installProfilePackages({
       manifest,
       type,
@@ -247,7 +247,7 @@ test('optional packages require declaration and install metadata', () => {
   )
 })
 
-test('dotnet adapters validate and drop Testkit from Line FE required set', () => {
+test('dotnet adapters validate and drop Testkit from Line FE recommended set', () => {
   const line = target('fe', 'dotnet-line')
   validateTarget({
     root: line,

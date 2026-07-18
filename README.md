@@ -17,7 +17,7 @@ platform-dna prune --project-root=/path/to/hub        # dry-run
 platform-dna prune --project-root=/path/to/hub --yes  # delete safe stale files
 ```
 
-The resolver installs missing required packages under
+The resolver installs missing recommended packages under
 `$PLATFORM_DNA_HOME/packages` (default `~/.platform-dna/packages`) and invokes
 each package's own `init`. Use `--no-install` to require preinstalled tools or
 `--package-root packageId=/path` for local development.

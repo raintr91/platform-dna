@@ -3,7 +3,8 @@ import path from 'node:path'
 import { packageRoot, type ProfileType } from '../config/project-root.js'
 
 export interface ProfileDefinition {
-  required: string[]
+  /** Kits the lane bootstrap installs by default; not runtime dependencies. */
+  recommended: string[]
   optional: string[]
   repoMarkers: string[]
   requiresAdapter?: boolean
@@ -31,12 +32,12 @@ export function loadProfiles(): ProfilesManifest {
   ) as ProfilesManifest
   if (manifest.schemaVersion !== 1) throw new Error('Unsupported profiles.json schemaVersion')
   for (const [type, profile] of Object.entries(manifest.profiles)) {
-    if (!Array.isArray(profile.required) || !Array.isArray(profile.optional)) {
-      throw new Error(`Invalid profile ${type}: required/optional arrays are required`)
+    if (!Array.isArray(profile.recommended) || !Array.isArray(profile.optional)) {
+      throw new Error(`Invalid profile ${type}: recommended/optional arrays are required`)
     }
-    for (const packageId of profile.required) {
+    for (const packageId of profile.recommended) {
       const pkg = manifest.packages[packageId]
-      if (!pkg) throw new Error(`Profile ${type} references unknown required package ${packageId}`)
+      if (!pkg) throw new Error(`Profile ${type} references unknown recommended package ${packageId}`)
       if (!pkg.types.includes(type as ProfileType)) {
         throw new Error(`Package ${packageId} does not support profile ${type}`)
       }

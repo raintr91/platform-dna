@@ -118,8 +118,8 @@ export function resolvePackageSet(opts: {
   // WinForms Line has no Playwright/E2E consumption lane; Testkit stays optional.
   const requested =
     opts.type === 'fe' && opts.adapter === 'dotnet-line'
-      ? profile.required.filter((id) => id !== 'testkit')
-      : [...profile.required]
+      ? profile.recommended.filter((id) => id !== 'testkit')
+      : [...profile.recommended]
   for (const id of opts.withOptional ?? []) {
     if (!profile.optional.includes(id)) {
       throw new Error(`${id} is not an optional package for profile ${opts.type}`)
