@@ -497,7 +497,7 @@ test('installers pin the immutable release and enforce lockfiles', () => {
     readFileSync('install.sh', 'utf8'),
     readFileSync('install.ps1', 'utf8'),
   ]) {
-    assert.match(script, /v0\.2\.0/)
+    assert.match(script, /v0\.3\.0/)
     assert.match(script, /pnpm install --frozen-lockfile/)
     assert.match(script, /npm ci/)
     assert.doesNotMatch(script, /(?:REF:-main|Ref = "main")/)
