@@ -4,8 +4,7 @@
     "docs": {
       "recommended": ["hubdocs", "bundlekit", "processkit"],
       "optional": ["artifactgraph", "codegraph"],
-      "repoMarkers": ["architecture", "product"],
-      "ownedSkills": ["platform-ai"]
+      "repoMarkers": ["architecture", "product"]
     },
     "fe": {
       "recommended": ["codegenkit", "testkit", "processkit"],

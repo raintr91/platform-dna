@@ -4,8 +4,6 @@ import type { ProfileType } from '../config/project-root.js'
 
 const PLATFORM_SCHEMA =
   'https://github.com/raintr91/platform-dna/blob/main/templates/schemas/platform-repos.schema.json'
-const LEGACY_SCHEMA =
-  'https://github.com/raintr91/platform-dna/blob/main/templates/schemas/legacy-repos.schema.json'
 const NON_PORTABLE = /(?:^|["'\s])(?:\.\.\/|~\/|\/home\/|[A-Za-z]:[\\/]|\\\\)/
 
 function parse(file: string): any {
@@ -48,36 +46,15 @@ export function seedProjectMaps(opts: {
     : {
         $schema: PLATFORM_SCHEMA,
         defaultGroup: opts.type,
-        harness: { profiles: {} },
         groups: {},
         projects: {},
       }
-  data.$schema ??= PLATFORM_SCHEMA
-  data.defaultGroup ??= opts.type
-  data.harness ??= {}
-  data.harness.profiles ??= {}
-  data.harness.profiles[opts.type] ??= {
-    groups: [opts.type],
-    skills: [],
-  }
-  const owned =
-    opts.type === 'docs'
-      ? ['platform-ai']
-      : opts.type === 'fe'
-        ? ['platform-base']
-        : []
-  const profileSkills = data.harness.profiles[opts.type].skills ?? []
-  data.harness.profiles[opts.type].skills = [
-    ...new Set([...profileSkills, ...owned]),
-  ]
-  data.groups ??= {}
-  data.groups[opts.type] ??= {
-    description: `${opts.type.toUpperCase()} current repository`,
-    primary: repoName,
-    projects: [repoName],
-  }
-  data.projects ??= {}
-  const current = Object.entries(data.projects).find(
+  data.$schema = PLATFORM_SCHEMA
+  data.defaultGroup = opts.type
+  // Project maps describe repositories only. Installed toolkit assets belong in
+  // each toolkit's install manifest, never in this map.
+  delete data.harness
+  const current = Object.entries(data.projects ?? {}).find(
     ([, project]: [string, any]) => project?.root === '.',
   )
   if (current && current[0] !== repoName) {
@@ -85,12 +62,26 @@ export function seedProjectMaps(opts: {
       `platform-repos.json already maps root "." as ${current[0]}; use that repository name`,
     )
   }
-  data.projects[repoName] ??= {
-    root: '.',
-    role: opts.type,
-    repo: repoName,
-    ...(opts.repoUrl ? { url: opts.repoUrl } : {}),
-    write: true,
+  const currentProject = current?.[1] as Record<string, unknown> | undefined
+  data.groups = {
+    [opts.type]: {
+      description: `${opts.type.toUpperCase()} current repository`,
+      primary: repoName,
+      projects: [repoName],
+    },
+  }
+  data.projects = {
+    [repoName]: {
+      root: '.',
+      role: opts.type,
+      repo: repoName,
+      ...(opts.repoUrl
+        ? { url: opts.repoUrl }
+        : typeof currentProject?.url === 'string'
+          ? { url: currentProject.url }
+          : {}),
+      write: typeof currentProject?.write === 'boolean' ? currentProject.write : true,
+    },
   }
 
   const written: string[] = []
@@ -98,18 +89,9 @@ export function seedProjectMaps(opts: {
   ;(writeIfChanged(platformFile, data) ? written : unchanged).push(platformFile)
   ;(writeIfChanged(exampleFile, data) ? written : unchanged).push(exampleFile)
 
-  if (opts.type === 'docs') {
-    for (const name of ['legacy-repos.json', 'legacy-repos.example.json']) {
-      const file = path.join(root, name)
-      assertPortableMap(file)
-      const value = existsSync(file) ? parse(file) : { $schema: LEGACY_SCHEMA, projects: {} }
-      ;(writeIfChanged(file, value) ? written : unchanged).push(file)
-    }
-  }
-
   const gitignore = path.join(root, '.gitignore')
   const existing = existsSync(gitignore) ? readFileSync(gitignore, 'utf8') : ''
-  const additions = ['platform-repos.local.json', 'legacy-repos.local.json'].filter(
+  const additions = ['platform-repos.local.json'].filter(
     (line) => !existing.split(/\r?\n/).includes(line),
   )
   if (additions.length) {

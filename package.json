@@ -1,7 +1,7 @@
 {
   "name": "@platform/platform-dna",
   "version": "0.2.0",
-  "description": "Platform AI profile resolver and portable harness bootstrap",
+  "description": "Destination-repo profile resolver, repo identity map, and FE platform-base bootstrap",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {

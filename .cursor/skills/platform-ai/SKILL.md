@@ -7,14 +7,15 @@ disable-model-invocation: true
 # /platform-ai — build Platform DNA
 
 Use this skill to design, implement, test, package, and release Platform DNA
-itself. Do not run Platform DNA against MCP tooling repositories.
+itself. Do not run Platform DNA against toolkit source checkouts.
 
 ## Scope
 
 - Own profile resolution for `docs`, `fe`, `be`, and `tests`.
-- Own portable map schemas/seeding and the meta-harness installed into
-  destination docs/code hubs.
+- Own the repo-only `platform-repos` schema/seeding and FE `/platform-base`.
 - Reject MCP targets (`mcp-package.json` or `role=tooling`).
+- Never sync `/platform-ai` or lane/meta rules into destination repos.
+- Bundlekit owns `legacy-repos`; do not seed or validate it here.
 - Do not keep a repository-local `platform-repos.json` or sibling topology.
 
 ## Workflow
@@ -29,6 +30,6 @@ itself. Do not run Platform DNA against MCP tooling repositories.
 ## Done
 
 - Resolver installs only into docs/code hubs.
-- MCP tool repositories remain independently managed.
+- Toolkit source checkouts remain independently managed.
 - No committed destination map contains machine or sibling paths.
 - Version, profiles, docs, and tests agree.

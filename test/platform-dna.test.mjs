@@ -99,11 +99,12 @@ test('profile manifest freezes recommended package sets and supported adapters',
     ),
     false,
   )
-  const docsMetaSkill = readFileSync(
-    path.resolve('harness/docs/skills/platform-ai/SKILL.md'),
-    'utf8',
-  )
-  assert.doesNotMatch(docsMetaSkill, /- \[ \]/)
+  assert.equal(schema.properties.harness, undefined)
+  assert.equal(schema.additionalProperties, false)
+  const packageContract = JSON.parse(readFileSync('mcp-package.json', 'utf8'))
+  assert.deepEqual(packageContract.skillsByType.docs, [])
+  assert.deepEqual(packageContract.skillsByType.fe, ['platform-base'])
+  assert.deepEqual(packageContract.ownedRules, [])
 })
 
 for (const [type, adapter] of [
@@ -124,11 +125,7 @@ for (const [type, adapter] of [
     assert.ok(maps.written.length > 0)
     const harness = installHarness({ root, type, adapter })
     assert.equal(harness.conflicts.length, 0)
-    assert.ok(existsSync(path.join(root, '.cursor/rules/platform-ai.mdc')))
-    assert.equal(
-      existsSync(path.join(root, '.cursor/skills/platform-ai/SKILL.md')),
-      type === 'docs',
-    )
+    assert.equal(existsSync(path.join(root, '.cursor/skills/platform-ai/SKILL.md')), false)
     assert.equal(
       existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')),
       type === 'fe' && (adapter === 'nuxt4' || adapter === 'nextjs'),
@@ -149,6 +146,8 @@ for (const [type, adapter] of [
     )
     assert.equal(map.projects[`${type}-base`].root, '.')
     assert.equal(map.projects[`${type}-base`].role, type)
+    assert.equal(map.harness, undefined)
+    assert.equal(existsSync(path.join(root, 'legacy-repos.json')), false)
   })
 }
 
@@ -185,6 +184,23 @@ test('non-portable committed maps are rejected; local maps are ignored', () => {
   assert.throws(() => assertPortableMap(file), /machine\/sibling path/)
   writeFileSync(path.join(root, 'platform-repos.local.json'), '{"root":"/home/member/x"}')
   assert.doesNotThrow(() => assertPortableMap(path.join(root, 'missing.json')))
+})
+
+test('platform map migration removes obsolete toolkit inventory', () => {
+  const root = target('docs')
+  writeFileSync(
+    path.join(root, 'platform-repos.json'),
+    JSON.stringify({
+      defaultGroup: 'docs',
+      harness: { profiles: { docs: { groups: ['docs'], skills: ['platform-ai', 'spec'] } } },
+      groups: {},
+      projects: {},
+    }),
+  )
+  seedProjectMaps({ root, type: 'docs', repoName: 'docs' })
+  const map = JSON.parse(readFileSync(path.join(root, 'platform-repos.json'), 'utf8'))
+  assert.equal(map.harness, undefined)
+  assert.deepEqual(Object.keys(map.projects), ['docs'])
 })
 
 test('rejects MCP tooling package repos and the removed tooling profile', () => {
@@ -313,37 +329,36 @@ test('dotnet adapters validate and drop Testkit from Line FE recommended set', (
 })
 
 test('profile switches mark old DNA assets stale and prune only unmodified files', () => {
-  const root = target('docs')
-  installHarness({ root, type: 'docs' })
-  const docsSkill = path.join(root, '.cursor/skills/platform-ai/SKILL.md')
-  assert.ok(existsSync(docsSkill))
-
+  const root = target('fe', 'nuxt4')
   installHarness({ root, type: 'fe', adapter: 'nuxt4' })
-  assert.ok(existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')))
+  const platformBase = path.join(root, '.cursor/skills/platform-base/SKILL.md')
+  assert.ok(existsSync(platformBase))
+
+  installHarness({ root, type: 'docs' })
   let status = getHarnessStatus(root)
-  const stale = status.files.find((file) => file.path === '.cursor/skills/platform-ai/SKILL.md')
-  assert.equal(status.type, 'fe')
+  const stale = status.files.find((file) => file.path === '.cursor/skills/platform-base/SKILL.md')
+  assert.equal(status.type, 'docs')
   assert.equal(stale.state, 'stale')
   assert.equal(stale.status, 'unmodified')
   assert.equal(stale.prunable, true)
 
   const dryRun = pruneHarness({ root })
   assert.equal(dryRun.dryRun, true)
-  assert.deepEqual(dryRun.planned, [docsSkill])
-  assert.ok(existsSync(docsSkill))
+  assert.deepEqual(dryRun.planned, [platformBase])
+  assert.ok(existsSync(platformBase))
 
-  writeFileSync(docsSkill, `${readFileSync(docsSkill, 'utf8')}\nmember change\n`)
+  writeFileSync(platformBase, `${readFileSync(platformBase, 'utf8')}\nmember change\n`)
   status = getHarnessStatus(root)
   assert.equal(
-    status.files.find((file) => file.path === '.cursor/skills/platform-ai/SKILL.md').status,
+    status.files.find((file) => file.path === '.cursor/skills/platform-base/SKILL.md').status,
     'modified',
   )
   const protectedResult = pruneHarness({ root, yes: true })
   assert.deepEqual(protectedResult.deleted, [])
-  assert.ok(existsSync(docsSkill))
+  assert.ok(existsSync(platformBase))
 
-  installHarness({ root, type: 'docs', force: true })
-  installHarness({ root, type: 'fe', adapter: 'nuxt4' })
+  installHarness({ root, type: 'fe', adapter: 'nuxt4', force: true })
+  installHarness({ root, type: 'docs' })
   const protectedFiles = [
     path.join(root, 'platform-repos.json'),
     path.join(root, 'legacy-repos.local.json'),
@@ -355,12 +370,12 @@ test('profile switches mark old DNA assets stale and prune only unmodified files
     writeFileSync(file, 'member or specialist owned\n')
   }
   const pruned = pruneHarness({ root, yes: true })
-  assert.deepEqual(pruned.deleted, [docsSkill])
-  assert.equal(existsSync(docsSkill), false)
+  assert.deepEqual(pruned.deleted, [platformBase])
+  assert.equal(existsSync(platformBase), false)
   for (const file of protectedFiles) assert.ok(existsSync(file))
   assert.equal(
     getHarnessStatus(root).files.some(
-      (file) => file.path === '.cursor/skills/platform-ai/SKILL.md',
+      (file) => file.path === '.cursor/skills/platform-base/SKILL.md',
     ),
     false,
   )
@@ -372,10 +387,6 @@ test('adapter overlay source maps to .cursor skills path', () => {
       'harness/fe/adapters/nuxt4/skills/platform-base/SKILL.md',
     ),
     '.cursor/skills/platform-base/SKILL.md',
-  )
-  assert.equal(
-    harnessSourceToTarget('harness/fe/rules/platform-ai.mdc'),
-    '.cursor/rules/platform-ai.mdc',
   )
   assert.doesNotThrow(() =>
     validateInstallManifest({
@@ -415,7 +426,7 @@ test('manifest compatibility and path containment reject unsafe prune inputs', (
         ...valid,
         files: {
           '../.gitignore': {
-            source: 'harness/docs/rules/platform-ai.mdc',
+            source: 'harness/fe/adapters/nuxt4/skills/platform-base/SKILL.md',
             sha256: '0'.repeat(64),
             state: 'stale',
           },
@@ -429,7 +440,7 @@ test('manifest compatibility and path containment reject unsafe prune inputs', (
         ...valid,
         files: {
           'platform-repos.json': {
-            source: 'harness/docs/rules/platform-ai.mdc',
+            source: 'harness/fe/adapters/nuxt4/skills/platform-base/SKILL.md',
             sha256: '0'.repeat(64),
             state: 'stale',
           },
@@ -438,8 +449,8 @@ test('manifest compatibility and path containment reject unsafe prune inputs', (
     /non-DNA or protected path/,
   )
 
-  const root = target('docs')
-  installHarness({ root, type: 'docs' })
+  const root = target('fe', 'nuxt4')
+  installHarness({ root, type: 'fe', adapter: 'nuxt4' })
   const outside = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-outside-'))
   const cursor = path.join(root, '.cursor')
   const movedCursor = path.join(root, '.cursor-real')
@@ -449,10 +460,10 @@ test('manifest compatibility and path containment reject unsafe prune inputs', (
 })
 
 test('CLI status and dry-run-by-default prune expose managed lifecycle', () => {
-  const root = target('docs')
+  const root = target('fe', 'nuxt4')
+  installHarness({ root, type: 'fe', adapter: 'nuxt4' })
   installHarness({ root, type: 'docs' })
-  installHarness({ root, type: 'tests' })
-  const docsSkill = path.join(root, '.cursor/skills/platform-ai/SKILL.md')
+  const platformBase = path.join(root, '.cursor/skills/platform-base/SKILL.md')
 
   const status = spawnSync(
     process.execPath,
@@ -470,7 +481,7 @@ test('CLI status and dry-run-by-default prune expose managed lifecycle', () => {
   )
   assert.equal(dryRun.status, 0, dryRun.stderr)
   assert.match(dryRun.stdout, /dry-run \(pass --yes to delete\)/)
-  assert.ok(existsSync(docsSkill))
+  assert.ok(existsSync(platformBase))
 
   const apply = spawnSync(
     process.execPath,
@@ -478,7 +489,7 @@ test('CLI status and dry-run-by-default prune expose managed lifecycle', () => {
     { cwd: path.resolve('.'), encoding: 'utf8' },
   )
   assert.equal(apply.status, 0, apply.stderr)
-  assert.equal(existsSync(docsSkill), false)
+  assert.equal(existsSync(platformBase), false)
 })
 
 test('installers pin the immutable release and enforce lockfiles', () => {

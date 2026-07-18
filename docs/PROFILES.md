@@ -3,9 +3,12 @@
 `profiles.json` is the executable manifest.
 
 Platform DNA installs **only** into product hubs (`docs` · `fe` · `be` · `tests`).
-It does **not** install into MCP tooling repos (`hubdocs`, `bundlekit`, …).
+It does **not** install into toolkit source checkouts (`hubdocs`, `bundlekit`, …).
+`/platform-ai` stays local to each toolkit source and is never synced by a
+destination profile. Platform DNA's only destination skill is FE
+`/platform-base` for the Nuxt/Next adapters.
 
-| Type | Recommended kits (installed by the bundle) | Adapter |
+| Type | Recommended toolkits (installed by the bundle) | Adapter |
 |------|--------------------------------------------|---------|
 | `docs` | Hubdocs, Bundlekit, Processkit | — |
 | `fe` | Codegenkit, Testkit, Processkit | `nuxt4`, `nextjs`, or `dotnet-line` |
@@ -15,12 +18,12 @@ It does **not** install into MCP tooling repos (`hubdocs`, `bundlekit`, …).
 `dotnet-line` drops Testkit from the recommended set (no web E2E consumption lane).
 FE DNA owns `/platform-base` for `nuxt4` / `nextjs` adapters only (not `dotnet-line`).
 
-Optional packages are installed only through `--with`. An optional package
+Optional toolkits are installed only through `--with`. An optional toolkit
 without install metadata fails with an actionable message; it is never silently
 promoted into the recommended set.
 
-Recommended kits are a convenience bundle, not runtime dependencies. Every
-specialist package remains independently installable and runs standalone;
+Recommended toolkits are a convenience bundle, not runtime dependencies. Every
+specialist toolkit remains independently installable and runs standalone;
 Platform DNA only coordinates installation and selected-profile initialization
 for docs/code hubs.
 
@@ -60,6 +63,6 @@ Modified stale files remain in place and in the manifest for review.
 
 The manifest schema, package identity, harness API, source/target mapping, and
 contained paths are validated before status, install, or prune proceeds.
-Project maps (`platform-repos*.json`, `legacy-repos*.json`), `.gitignore`,
-specialist package files, and files not recorded by Platform DNA are outside
-prune ownership.
+Project maps, `.gitignore`, specialist toolkit files, and files not recorded by
+Platform DNA are outside prune ownership. Platform DNA owns only
+`platform-repos*.json`; Bundlekit owns `legacy-repos*.json`.
