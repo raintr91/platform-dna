@@ -24,5 +24,6 @@ else
 fi
 ln -sf "$INSTALL_DIR/bin/platform-dna.mjs" "$BIN_DIR/platform-dna"
 chmod +x "$INSTALL_DIR/bin/platform-dna.mjs"
-echo "Installed Platform DNA. Example:"
-echo "  platform-dna init --type=docs --project-root=/path/to/docs --yes"
+echo "Installed Platform DNA. Next:"
+echo "  cd /path/to/product"
+echo "  platform-dna init"

@@ -21,4 +21,6 @@ if (Get-Command pnpm -ErrorAction SilentlyContinue) {
 Pop-Location
 New-Item -ItemType Directory -Force $BinDir | Out-Null
 "@node `"$InstallDir\bin\platform-dna.mjs`" %*" | Set-Content "$BinDir\platform-dna.cmd"
-Write-Host "Installed Platform DNA."
+Write-Host "Installed Platform DNA. Next:"
+Write-Host "  cd C:\path\to\product"
+Write-Host "  platform-dna init"

@@ -3,19 +3,26 @@
 Profile resolver and repository identity bootstrap for **docs and code repos**
 (`docs` · `fe` · `be` · `tests`). Never install into toolkit source checkouts.
 
+## Quick start
+
+**Linux / WSL**
+
 ```bash
-platform-dna init --type=docs --project-root=/path/to/base-docs --yes
-platform-dna init --type=fe --adapter=nuxt4 --project-root=/path/to/portal --yes
-# FE adapters nuxt4/nextjs also sync /platform-base
-platform-dna init --type=fe --adapter=nextjs --project-root=/path/to/nextjs --yes
-platform-dna init --type=fe --adapter=dotnet-line --project-root=/path/to/line --yes
-platform-dna init --type=be --adapter=laravel --project-root=/path/to/api --yes
-platform-dna init --type=be --adapter=dotnet-integration --project-root=/path/to/integration --yes
-platform-dna init --type=tests --project-root=/path/to/base-tests --yes
-platform-dna status --project-root=/path/to/hub
-platform-dna prune --project-root=/path/to/hub        # dry-run
-platform-dna prune --project-root=/path/to/hub --yes  # delete safe stale files
+curl -fsSL https://raw.githubusercontent.com/raintr91/platform-dna/main/install.sh | bash
+cd /path/to/product
+platform-dna init
 ```
+
+**Windows**
+
+```powershell
+irm https://raw.githubusercontent.com/raintr91/platform-dna/main/install.ps1 | iex
+```
+
+`init` opens selectors for the destination lane and, when required, its adapter.
+For CI or other non-interactive use, pass `--type`, the required `--adapter`,
+`--project-root`, and `--yes` explicitly. FE adapters `nuxt4` and `nextjs` also
+sync `/platform-base`.
 
 The resolver installs missing recommended toolkits under
 `$PLATFORM_DNA_HOME/packages` (default `~/.platform-dna/packages`) and invokes
