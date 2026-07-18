@@ -125,6 +125,7 @@ async function main(): Promise<void> {
   const packageIds = resolvePackageSet({
     manifest,
     type,
+    adapter,
     withOptional: list('--with'),
   })
   if (has('--dry-run')) {

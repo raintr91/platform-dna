@@ -8,8 +8,10 @@ It does **not** install into MCP tooling repos (`hubdocs`, `bundlekit`, …).
 | Type | Required packages | Adapter |
 |------|-------------------|---------|
 | `docs` | Hubdocs, Bundlekit, Processkit | — |
-| `fe` | Codegenkit, Testkit, Processkit | `nuxt4` or `nextjs` |
-| `be` | Codegenkit, Processkit | `fastapi` or `laravel` |
+| `fe` | Codegenkit, Testkit, Processkit | `nuxt4`, `nextjs`, or `dotnet-line` |
+| `be` | Codegenkit, Processkit | `fastapi`, `laravel`, or `dotnet-integration` |
+
+`dotnet-line` drops Testkit from the required set (no web E2E consumption lane).
 | `tests` | Testkit | — |
 
 Optional packages are installed only through `--with`. An optional package

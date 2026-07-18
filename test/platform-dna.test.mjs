@@ -33,8 +33,15 @@ function target(type, adapter) {
   const root = mkdtempSync(path.join(os.tmpdir(), `platform-dna-${type}-`))
   if (type === 'docs') mkdirSync(path.join(root, 'architecture'))
   if (type === 'fe') {
-    writeFileSync(path.join(root, 'package.json'), '{}\n')
-    writeFileSync(path.join(root, `${adapter === 'nextjs' ? 'next' : 'nuxt'}.config.ts`), '')
+    if (adapter === 'dotnet-line') {
+      writeFileSync(path.join(root, 'Line.sln'), '')
+    } else {
+      writeFileSync(path.join(root, 'package.json'), '{}\n')
+      writeFileSync(
+        path.join(root, `${adapter === 'nextjs' ? 'next' : 'nuxt'}.config.ts`),
+        '',
+      )
+    }
   }
   if (type === 'be' && adapter === 'fastapi') {
     writeFileSync(
@@ -54,6 +61,9 @@ function target(type, adapter) {
       }),
     )
   }
+  if (type === 'be' && adapter === 'dotnet-integration') {
+    writeFileSync(path.join(root, 'Integration.sln'), '')
+  }
   if (type === 'tests') mkdirSync(path.join(root, 'tests'))
   return root
 }
@@ -64,8 +74,16 @@ test('profile manifest freezes required package sets and supported adapters', ()
     'bundlekit',
     'processkit',
   ])
-  assert.deepEqual(manifest.profiles.fe.adapters, ['nuxt4', 'nextjs'])
-  assert.deepEqual(manifest.profiles.be.adapters, ['fastapi', 'laravel'])
+  assert.deepEqual(manifest.profiles.fe.adapters, [
+    'nuxt4',
+    'nextjs',
+    'dotnet-line',
+  ])
+  assert.deepEqual(manifest.profiles.be.adapters, [
+    'fastapi',
+    'laravel',
+    'dotnet-integration',
+  ])
   assert.deepEqual(manifest.profiles.tests.required, ['testkit'])
   const schema = JSON.parse(
     readFileSync(
@@ -224,6 +242,44 @@ test('optional packages require declaration and install metadata', () => {
   )
 })
 
+test('dotnet adapters validate and drop Testkit from Line FE required set', () => {
+  const line = target('fe', 'dotnet-line')
+  validateTarget({
+    root: line,
+    type: 'fe',
+    profile: manifest.profiles.fe,
+    adapter: 'dotnet-line',
+  })
+  assert.deepEqual(
+    resolvePackageSet({
+      manifest,
+      type: 'fe',
+      adapter: 'dotnet-line',
+    }),
+    ['codegenkit', 'processkit'],
+  )
+  writeFileSync(
+    path.join(line, 'platform-repos.json'),
+    JSON.stringify({
+      projects: { line: { root: '.', role: 'client' } },
+    }),
+  )
+  validateTarget({
+    root: line,
+    type: 'fe',
+    profile: manifest.profiles.fe,
+    adapter: 'dotnet-line',
+  })
+
+  const integration = target('be', 'dotnet-integration')
+  validateTarget({
+    root: integration,
+    type: 'be',
+    profile: manifest.profiles.be,
+    adapter: 'dotnet-integration',
+  })
+})
+
 test('profile switches mark old DNA assets stale and prune only unmodified files', () => {
   const root = target('docs')
   installHarness({ root, type: 'docs' })
@@ -368,7 +424,7 @@ test('installers pin the immutable release and enforce lockfiles', () => {
     readFileSync('install.sh', 'utf8'),
     readFileSync('install.ps1', 'utf8'),
   ]) {
-    assert.match(script, /v0\.1\.5/)
+    assert.match(script, /v0\.1\.6/)
     assert.match(script, /pnpm install --frozen-lockfile/)
     assert.match(script, /npm ci/)
     assert.doesNotMatch(script, /(?:REF:-main|Ref = "main")/)

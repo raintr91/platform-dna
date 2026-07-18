@@ -1,13 +1,20 @@
 {
   "schemaVersion": 1,
   "package": "@platform/platform-dna",
-  "version": "0.1.5",
-  "types": ["docs", "fe", "be", "tests"],
+  "version": "0.1.6",
+  "types": [
+    "docs",
+    "fe",
+    "be",
+    "tests"
+  ],
   "requires": [],
   "optional": [],
   "tools": [],
   "skillsByType": {
-    "docs": ["platform-ai"],
+    "docs": [
+      "platform-ai"
+    ],
     "fe": [],
     "be": [],
     "tests": []

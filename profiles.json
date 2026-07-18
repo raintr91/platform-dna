@@ -11,15 +11,15 @@
       "required": ["codegenkit", "testkit", "processkit"],
       "optional": ["artifactgraph", "codegraph", "hubdocs"],
       "requiresAdapter": true,
-      "adapters": ["nuxt4", "nextjs"],
-      "repoMarkers": ["package.json"]
+      "adapters": ["nuxt4", "nextjs", "dotnet-line"],
+      "repoMarkers": ["package.json", "*.sln"]
     },
     "be": {
       "required": ["codegenkit", "processkit"],
       "optional": ["artifactgraph", "codegraph", "hubdocs"],
       "requiresAdapter": true,
-      "adapters": ["fastapi", "laravel"],
-      "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json"]
+      "adapters": ["fastapi", "laravel", "dotnet-integration"],
+      "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json", "*.sln"]
     },
     "tests": {
       "required": ["testkit"],

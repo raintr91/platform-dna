@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ProfileDefinition } from './manifest.js'
 import type { ProfileType } from '../config/project-root.js'
@@ -21,11 +21,32 @@ function normalizeRole(role?: string): string | undefined {
   return {
     frontend: 'fe',
     portal: 'fe',
+    client: 'fe',
     backend: 'be',
     api: 'be',
     test: 'tests',
     plans: 'tests',
   }[role] ?? role
+}
+
+function hasDotnetMarker(root: string): boolean {
+  try {
+    return readdirSync(root).some((name) => name.endsWith('.sln') || name.endsWith('.csproj'))
+  } catch {
+    return false
+  }
+}
+
+function markerPresent(root: string, marker: string): boolean {
+  if (marker.includes('*')) {
+    const suffix = marker.replace(/^\*/, '')
+    try {
+      return readdirSync(root).some((name) => name.endsWith(suffix))
+    } catch {
+      return false
+    }
+  }
+  return existsSync(path.join(root, marker))
 }
 
 export function validateTarget(opts: {
@@ -61,14 +82,20 @@ export function validateTarget(opts: {
     }
   }
   const markerFound = opts.profile.repoMarkers.some((marker) =>
-    existsSync(path.join(opts.root, marker)),
+    markerPresent(opts.root, marker),
   )
   if (!markerFound && !role && !opts.force) {
     throw new Error(
       `Repository does not look like a ${opts.type} base (expected one of: ${opts.profile.repoMarkers.join(', ')}); use --force only for a new empty base`,
     )
   }
-  if (opts.type === 'fe' && opts.adapter) {
+  if (opts.type === 'fe' && opts.adapter === 'dotnet-line') {
+    if (!hasDotnetMarker(opts.root) && !opts.force) {
+      throw new Error(
+        'Selected dotnet-line, but no .sln/.csproj found; pass --force only for a new base',
+      )
+    }
+  } else if (opts.type === 'fe' && opts.adapter) {
     const expected =
       opts.adapter === 'nuxt4'
         ? ['nuxt.config.ts', 'nuxt.config.js']
@@ -76,6 +103,13 @@ export function validateTarget(opts: {
     if (!expected.some((file) => existsSync(path.join(opts.root, file))) && !opts.force) {
       throw new Error(
         `Selected ${opts.adapter}, but no ${expected.join(' or ')} found; pass --force only for a new base`,
+      )
+    }
+  }
+  if (opts.type === 'be' && opts.adapter === 'dotnet-integration') {
+    if (!hasDotnetMarker(opts.root) && !opts.force) {
+      throw new Error(
+        'Selected dotnet-integration, but no .sln/.csproj found; pass --force only for a new base',
       )
     }
   }

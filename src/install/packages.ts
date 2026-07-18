@@ -112,9 +112,14 @@ export function resolvePackageSet(opts: {
   manifest: ProfilesManifest
   type: ProfileType
   withOptional?: string[]
+  adapter?: string
 }): string[] {
   const profile = opts.manifest.profiles[opts.type]
-  const requested = [...profile.required]
+  // WinForms Line has no Playwright/E2E consumption lane; Testkit stays optional.
+  const requested =
+    opts.type === 'fe' && opts.adapter === 'dotnet-line'
+      ? profile.required.filter((id) => id !== 'testkit')
+      : [...profile.required]
   for (const id of opts.withOptional ?? []) {
     if (!profile.optional.includes(id)) {
       throw new Error(`${id} is not an optional package for profile ${opts.type}`)
