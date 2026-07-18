@@ -15,6 +15,7 @@ import test from 'node:test'
 
 import {
   getHarnessStatus,
+  harnessSourceToTarget,
   installHarness,
   pruneHarness,
   validateInstallManifest,
@@ -121,12 +122,16 @@ for (const [type, adapter] of [
     })
     const maps = seedProjectMaps({ root, type, repoName: `${type}-base` })
     assert.ok(maps.written.length > 0)
-    const harness = installHarness({ root, type })
+    const harness = installHarness({ root, type, adapter })
     assert.equal(harness.conflicts.length, 0)
     assert.ok(existsSync(path.join(root, '.cursor/rules/platform-ai.mdc')))
     assert.equal(
       existsSync(path.join(root, '.cursor/skills/platform-ai/SKILL.md')),
       type === 'docs',
+    )
+    assert.equal(
+      existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')),
+      type === 'fe' && (adapter === 'nuxt4' || adapter === 'nextjs'),
     )
     const ids = resolvePackageSet({ manifest, type })
     assert.deepEqual(ids, manifest.profiles[type].required)
@@ -286,7 +291,8 @@ test('profile switches mark old DNA assets stale and prune only unmodified files
   const docsSkill = path.join(root, '.cursor/skills/platform-ai/SKILL.md')
   assert.ok(existsSync(docsSkill))
 
-  installHarness({ root, type: 'fe' })
+  installHarness({ root, type: 'fe', adapter: 'nuxt4' })
+  assert.ok(existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')))
   let status = getHarnessStatus(root)
   const stale = status.files.find((file) => file.path === '.cursor/skills/platform-ai/SKILL.md')
   assert.equal(status.type, 'fe')
@@ -310,7 +316,7 @@ test('profile switches mark old DNA assets stale and prune only unmodified files
   assert.ok(existsSync(docsSkill))
 
   installHarness({ root, type: 'docs', force: true })
-  installHarness({ root, type: 'fe' })
+  installHarness({ root, type: 'fe', adapter: 'nuxt4' })
   const protectedFiles = [
     path.join(root, 'platform-repos.json'),
     path.join(root, 'legacy-repos.local.json'),
@@ -330,6 +336,35 @@ test('profile switches mark old DNA assets stale and prune only unmodified files
       (file) => file.path === '.cursor/skills/platform-ai/SKILL.md',
     ),
     false,
+  )
+})
+
+test('adapter overlay source maps to .cursor skills path', () => {
+  assert.equal(
+    harnessSourceToTarget(
+      'harness/fe/adapters/nuxt4/skills/platform-base/SKILL.md',
+    ),
+    '.cursor/skills/platform-base/SKILL.md',
+  )
+  assert.equal(
+    harnessSourceToTarget('harness/fe/rules/platform-ai.mdc'),
+    '.cursor/rules/platform-ai.mdc',
+  )
+  assert.doesNotThrow(() =>
+    validateInstallManifest({
+      schemaVersion: 1,
+      package: '@platform/platform-dna',
+      packageVersion: '0.2.0',
+      type: 'fe',
+      harnessApi: 1,
+      files: {
+        '.cursor/skills/platform-base/SKILL.md': {
+          source: 'harness/fe/adapters/nuxt4/skills/platform-base/SKILL.md',
+          sha256: '0'.repeat(64),
+          state: 'active',
+        },
+      },
+    }),
   )
 })
 
@@ -424,7 +459,7 @@ test('installers pin the immutable release and enforce lockfiles', () => {
     readFileSync('install.sh', 'utf8'),
     readFileSync('install.ps1', 'utf8'),
   ]) {
-    assert.match(script, /v0\.1\.6/)
+    assert.match(script, /v0\.2\.0/)
     assert.match(script, /pnpm install --frozen-lockfile/)
     assert.match(script, /npm ci/)
     assert.doesNotMatch(script, /(?:REF:-main|Ref = "main")/)

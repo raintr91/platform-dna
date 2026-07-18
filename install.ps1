@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$HOME\.platform-dna\bootstrap",
-  [string]$Ref = "v0.1.6"
+  [string]$Ref = "v0.2.0"
 )
 
 $ErrorActionPreference = "Stop"

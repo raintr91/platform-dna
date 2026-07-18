@@ -2,6 +2,7 @@ export { loadProfiles } from './profile/manifest.js'
 export { validateTarget } from './profile/detect.js'
 export {
   getHarnessStatus,
+  harnessSourceToTarget,
   installHarness,
   pruneHarness,
   readInstallManifest,

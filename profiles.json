@@ -12,7 +12,8 @@
       "optional": ["artifactgraph", "codegraph", "hubdocs"],
       "requiresAdapter": true,
       "adapters": ["nuxt4", "nextjs", "dotnet-line"],
-      "repoMarkers": ["package.json", "*.sln"]
+      "repoMarkers": ["package.json", "*.sln"],
+      "ownedSkills": ["platform-base"]
     },
     "be": {
       "required": ["codegenkit", "processkit"],

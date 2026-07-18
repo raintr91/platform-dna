@@ -58,8 +58,18 @@ export function seedProjectMaps(opts: {
   data.harness.profiles ??= {}
   data.harness.profiles[opts.type] ??= {
     groups: [opts.type],
-    skills: opts.type === 'docs' ? ['platform-ai'] : [],
+    skills: [],
   }
+  const owned =
+    opts.type === 'docs'
+      ? ['platform-ai']
+      : opts.type === 'fe'
+        ? ['platform-base']
+        : []
+  const profileSkills = data.harness.profiles[opts.type].skills ?? []
+  data.harness.profiles[opts.type].skills = [
+    ...new Set([...profileSkills, ...owned]),
+  ]
   data.groups ??= {}
   data.groups[opts.type] ??= {
     description: `${opts.type.toUpperCase()} current repository`,

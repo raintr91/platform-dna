@@ -152,6 +152,7 @@ async function main(): Promise<void> {
   const harness = installHarness({
     root,
     type,
+    adapter,
     force: has('--force'),
   })
   for (const file of harness.written) console.log(`  wrote: ${file}`)

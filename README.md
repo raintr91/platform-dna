@@ -6,6 +6,8 @@ Profile resolver and meta-harness bootstrap for **docs and code hubs**
 ```bash
 platform-dna init --type=docs --project-root=/path/to/base-docs --yes
 platform-dna init --type=fe --adapter=nuxt4 --project-root=/path/to/portal --yes
+# FE adapters nuxt4/nextjs also sync /platform-base
+platform-dna init --type=fe --adapter=nextjs --project-root=/path/to/nextjs --yes
 platform-dna init --type=fe --adapter=dotnet-line --project-root=/path/to/line --yes
 platform-dna init --type=be --adapter=laravel --project-root=/path/to/api --yes
 platform-dna init --type=be --adapter=dotnet-integration --project-root=/path/to/integration --yes

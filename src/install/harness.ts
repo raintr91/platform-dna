@@ -55,12 +55,32 @@ function hash(content: string): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
-function walk(root: string): string[] {
+function walk(root: string, opts?: { skipNames?: Set<string> }): string[] {
   if (!existsSync(root)) return []
+  const skip = opts?.skipNames ?? new Set()
   return readdirSync(root).flatMap((name) => {
+    if (skip.has(name)) return []
     const file = path.join(root, name)
-    return statSync(file).isDirectory() ? walk(file) : [file]
+    return statSync(file).isDirectory() ? walk(file, opts) : [file]
   })
+}
+
+/** Map harness source path → installed .cursor relative path. */
+export function harnessSourceToTarget(source: string): string {
+  const parts = source.split('/')
+  if (parts[0] !== 'harness') {
+    throw new Error(`Invalid Platform DNA harness source: ${source}`)
+  }
+  // harness/fe/adapters/<adapter>/skills/... → .cursor/skills/...
+  if (
+    parts[2] === 'adapters' &&
+    parts[3] &&
+    (parts[1] === 'fe' || parts[1] === 'be' || parts[1] === 'docs' || parts[1] === 'tests')
+  ) {
+    return `.cursor/${parts.slice(4).join('/')}`
+  }
+  // harness/common|docs|fe|be|tests/<rel> → .cursor/<rel>
+  return `.cursor/${parts.slice(2).join('/')}`
 }
 
 function manifestFile(root: string): string {
@@ -116,10 +136,12 @@ function validateManifestFile(targetRel: string, value: unknown): InstallManifes
   }
   if (!isRecord(value)) throw new Error(`Invalid manifest file record: ${relative}`)
   const source = normalizedRelative(String(value.source ?? ''), 'source path')
-  if (!/^harness\/(?:common|docs|fe|be|tests)\/.+/.test(source)) {
+  if (
+    !/^harness\/(?:common|docs|fe|be|tests)\/(?:adapters\/[^/]+\/)?.+/.test(source)
+  ) {
     throw new Error(`Manifest contains a non-DNA source: ${source}`)
   }
-  const expectedTarget = `.cursor/${source.split('/').slice(2).join('/')}`
+  const expectedTarget = harnessSourceToTarget(source)
   if (expectedTarget !== relative) {
     throw new Error(`Manifest source/target mismatch: ${source} -> ${relative}`)
   }
@@ -275,14 +297,26 @@ export function pruneHarness(opts: { root: string; yes?: boolean }): PruneHarnes
 export function installHarness(opts: {
   root: string
   type: ProfileType
+  adapter?: string
   force?: boolean
 }): { written: string[]; unchanged: string[]; conflicts: string[] } {
   const targetRoot = path.resolve(opts.root)
   const previous = readInstallManifest(targetRoot)
-  const roots = [
-    path.join(packageRoot(), 'harness', 'common'),
-    path.join(packageRoot(), 'harness', opts.type),
+  const roots: Array<{ dir: string; skipNames?: Set<string> }> = [
+    { dir: path.join(packageRoot(), 'harness', 'common') },
+    // Skip adapters/ so lane walk does not copy overlay trees into .cursor/adapters/
+    { dir: path.join(packageRoot(), 'harness', opts.type), skipNames: new Set(['adapters']) },
   ]
+  if (opts.adapter) {
+    const overlay = path.join(
+      packageRoot(),
+      'harness',
+      opts.type,
+      'adapters',
+      opts.adapter,
+    )
+    if (existsSync(overlay)) roots.push({ dir: overlay })
+  }
   const result = {
     written: [] as string[],
     unchanged: [] as string[],
@@ -296,13 +330,13 @@ export function installHarness(opts: {
   )
 
   for (const sourceRoot of roots) {
-    for (const source of walk(sourceRoot)) {
-      const rel = path.relative(sourceRoot, source)
-      const targetRel = path.join('.cursor', rel).split(path.sep).join('/')
+    for (const source of walk(sourceRoot.dir, { skipNames: sourceRoot.skipNames })) {
+      const sourceRel = path.relative(packageRoot(), source).split(path.sep).join('/')
+      const targetRel = harnessSourceToTarget(sourceRel)
       const target = targetPath(targetRoot, targetRel)
       const content = readFileSync(source, 'utf8')
       files[targetRel] = {
-        source: path.relative(packageRoot(), source).split(path.sep).join('/'),
+        source: sourceRel,
         sha256: hash(content),
         state: 'active',
       }

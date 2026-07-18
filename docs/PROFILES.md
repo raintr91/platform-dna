@@ -10,9 +10,10 @@ It does **not** install into MCP tooling repos (`hubdocs`, `bundlekit`, …).
 | `docs` | Hubdocs, Bundlekit, Processkit | — |
 | `fe` | Codegenkit, Testkit, Processkit | `nuxt4`, `nextjs`, or `dotnet-line` |
 | `be` | Codegenkit, Processkit | `fastapi`, `laravel`, or `dotnet-integration` |
+| `tests` | Testkit | — |
 
 `dotnet-line` drops Testkit from the required set (no web E2E consumption lane).
-| `tests` | Testkit | — |
+FE DNA owns `/platform-base` for `nuxt4` / `nextjs` adapters only (not `dotnet-line`).
 
 Optional packages are installed only through `--with`. An optional package
 without install metadata fails with an actionable message; it is never silently
