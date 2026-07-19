@@ -5,24 +5,24 @@ Profile resolver and repository identity bootstrap for **docs and code repos**
 
 ## Quick start
 
-**Linux / WSL**
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raintr91/platform-dna/main/install.sh | bash
-cd /path/to/product
-platform-dna init
+curl -fsSL https://raw.githubusercontent.com/raintr91/platform-dna/main/install.sh | bash  # install
+platform-dna init       # agents → lane → adapter (when required)
+platform-dna deinit     # remove Platform DNA from the current repo
+platform-dna uninstall  # remove all registered installs and the CLI
 ```
 
-**Windows**
+Run `init` from the destination repo. It detects installed agents and opens
+selectors in this order: agents, lane, then the adapter when the lane requires
+one. A lane already declared by `platform-repos.json` is locked.
 
-```powershell
-irm https://raw.githubusercontent.com/raintr91/platform-dna/main/install.ps1 | iex
-```
+For CI or other non-interactive use, keep using the long flags: `--target`,
+`--type`, the required `--adapter`, `--project-root`, and `--yes`. With `--yes`,
+the backward-compatible defaults remain `cursor` and `docs`. FE adapters
+`nuxt4` and `nextjs` also sync `/platform-base`.
 
-`init` opens selectors for the destination lane and, when required, its adapter.
-For CI or other non-interactive use, pass `--type`, the required `--adapter`,
-`--project-root`, and `--yes` explicitly. FE adapters `nuxt4` and `nextjs` also
-sync `/platform-base`.
+Windows installation remains available with
+`irm https://raw.githubusercontent.com/raintr91/platform-dna/main/install.ps1 | iex`.
 
 The resolver installs missing recommended toolkits under
 `$PLATFORM_DNA_HOME/packages` (default `~/.platform-dna/packages`) and invokes

@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { ProfileDefinition } from './manifest.js'
 import type { ProfileType } from '../config/project-root.js'
 
-function declaredRole(root: string): string | undefined {
+export function declaredRole(root: string): string | undefined {
   const file = path.join(root, 'platform-repos.json')
   if (!existsSync(file)) return undefined
   try {
@@ -16,7 +16,7 @@ function declaredRole(root: string): string | undefined {
   }
 }
 
-function normalizeRole(role?: string): string | undefined {
+export function normalizeRole(role?: string): string | undefined {
   if (!role) return undefined
   return {
     frontend: 'fe',
@@ -27,6 +27,13 @@ function normalizeRole(role?: string): string | undefined {
     test: 'tests',
     plans: 'tests',
   }[role] ?? role
+}
+
+export function declaredProfileType(root: string): ProfileType | undefined {
+  const role = normalizeRole(declaredRole(root))
+  return role === 'docs' || role === 'fe' || role === 'be' || role === 'tests'
+    ? role
+    : undefined
 }
 
 function hasDotnetMarker(root: string): boolean {

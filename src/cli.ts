@@ -5,8 +5,6 @@ import {
   packageRoot,
   packageVersion,
   resolveProjectRoot,
-  resolveType,
-  type ProfileType,
 } from './config/project-root.js'
 import { loadProfiles } from './profile/manifest.js'
 import { validateTarget } from './profile/detect.js'
@@ -22,28 +20,13 @@ import {
   resolvePackageSet,
 } from './install/packages.js'
 import { selectPrompt } from './install/prompt.js'
+import { resolveInitWizard } from './install/init-wizard.js'
 import {
   discoverInstalls,
   ledgerPath,
   readLedger,
   removeLedger,
 } from './install/ledger.js'
-
-const laneChoices: Array<{ value: ProfileType; name: string }> = [
-  { value: 'docs', name: 'Docs' },
-  { value: 'fe', name: 'Frontend (FE)' },
-  { value: 'be', name: 'Backend (BE)' },
-  { value: 'tests', name: 'Tests' },
-]
-
-const adapterNames: Record<string, string> = {
-  nuxt4: 'Nuxt 4',
-  nextjs: 'Next.js',
-  'dotnet-line': '.NET Line',
-  fastapi: 'FastAPI',
-  laravel: 'Laravel',
-  'dotnet-integration': '.NET Integration',
-}
 
 function arg(name: string): string | undefined {
   const equal = process.argv.find((value) => value.startsWith(`${name}=`))
@@ -83,7 +66,8 @@ function packageRoots(): Record<string, string> {
 function usage(): never {
   console.log(`platform-dna ${packageVersion()}
 
-  init [--type=docs|fe|be|tests] [--adapter=…] [--with=artifactgraph]
+  init [--target=agent,…|auto|all|none] [--type=docs|fe|be|tests] [--adapter=…]
+       [--with=artifactgraph]
        [--project-root <path>] [--docs-root <path>]
        [--repo-name <id>] [--repo-url <url>]
        [--package-root packageId=/path] [--no-install] [--force] [--dry-run] [--yes]
@@ -96,7 +80,7 @@ function usage(): never {
   version
 
 Platform DNA installs only into docs/code hubs (docs · fe · be · tests).
-Run "platform-dna init" in a terminal to select a lane and adapter.
+Run "platform-dna init" in a terminal to select agents, a lane, and an adapter.
 Never init into MCP tooling repos (hubdocs, bundlekit, …).
 Specialist skills/tools remain owned by their package.
 `)
@@ -236,29 +220,21 @@ async function main(): Promise<void> {
   }
 
   const manifest = loadProfiles()
-  const requestedType = arg('--type')
   const interactiveInit =
     command === 'init' &&
     !has('--yes') &&
     Boolean(process.stdin.isTTY && process.stdout.isTTY)
-  const type =
-    interactiveInit && !requestedType
-      ? await selectPrompt({
-          message: 'Select the destination lane:',
-          choices: laneChoices,
-        })
-      : resolveType(requestedType)
+  const selection = await resolveInitWizard({
+    root,
+    manifest,
+    requestedTarget: arg('--target'),
+    requestedType: arg('--type'),
+    requestedAdapter: arg('--adapter'),
+    interactive: interactiveInit,
+  })
+  const { target, targets, type } = selection
   const profile = manifest.profiles[type]
-  let adapter = arg('--adapter')
-  if (interactiveInit && profile.requiresAdapter && !adapter) {
-    adapter = await selectPrompt({
-      message: `Select the ${type.toUpperCase()} adapter:`,
-      choices: (profile.adapters ?? []).map((value) => ({
-        value,
-        name: adapterNames[value] ?? value,
-      })),
-    })
-  }
+  const adapter = selection.adapter
   const docsRoot = arg('--docs-root')
 
   if (command === 'profile') {
@@ -294,13 +270,18 @@ async function main(): Promise<void> {
       type,
       packageIds,
       projectRoot: root,
+      target,
       adapter,
       docsRoot,
       force: has('--force'),
       dryRun: true,
     })
     console.log(
-      JSON.stringify({ type, root, adapter, docsRoot, packageIds, invocations: plan }, null, 2),
+      JSON.stringify(
+        { targets, type, root, adapter, docsRoot, packageIds, invocations: plan },
+        null,
+        2,
+      ),
     )
     return
   }
@@ -332,6 +313,7 @@ async function main(): Promise<void> {
     type,
     packageIds,
     projectRoot: root,
+    target,
     adapter,
     docsRoot,
     force: has('--force'),

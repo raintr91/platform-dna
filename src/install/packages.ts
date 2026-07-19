@@ -98,6 +98,7 @@ function expand(
   values: string[],
   vars: {
     projectRoot: string
+    target: string
     adapter?: string
     docsRoot?: string
     force?: boolean
@@ -111,6 +112,7 @@ function expand(
     return [
       value
         .replaceAll('{projectRoot}', vars.projectRoot)
+        .replaceAll('{target}', vars.target)
         .replaceAll('{adapter}', vars.adapter ?? ''),
     ]
   })
@@ -142,6 +144,7 @@ export function installProfilePackages(opts: {
   type: ProfileType
   packageIds: string[]
   projectRoot: string
+  target?: string
   adapter?: string
   docsRoot?: string
   force?: boolean
@@ -167,6 +170,7 @@ export function installProfilePackages(opts: {
     const expanded = invocations.map((argv) =>
       expand(argv, {
         projectRoot: opts.projectRoot,
+        target: opts.target ?? 'cursor',
         adapter: opts.adapter,
         docsRoot: opts.docsRoot,
         force: opts.force,

@@ -35,19 +35,19 @@
       "types": ["docs", "fe", "be", "tests"],
       "invocations": {
         "docs": [
-          ["init", "--target=cursor", "--location=local", "--yes", "--docs-root={projectRoot}"],
+          ["init", "--target={target}", "--location=local", "--yes", "--docs-root={projectRoot}"],
           ["harness", "install", "--type=docs", "--project-root={projectRoot}", "{force}"]
         ],
         "fe": [
-          ["init", "--target=cursor", "--location=local", "--yes", "{docsRootArg}"],
+          ["init", "--target={target}", "--location=local", "--yes", "{docsRootArg}"],
           ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
         ],
         "be": [
-          ["init", "--target=cursor", "--location=local", "--yes", "{docsRootArg}"],
+          ["init", "--target={target}", "--location=local", "--yes", "{docsRootArg}"],
           ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
         ],
         "tests": [
-          ["init", "--target=cursor", "--location=local", "--yes", "{docsRootArg}"],
+          ["init", "--target={target}", "--location=local", "--yes", "{docsRootArg}"],
           ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
         ]
       }
@@ -58,7 +58,7 @@
       "bin": "bin/bundlekit.mjs",
       "types": ["docs"],
       "invocations": {
-        "docs": [["init", "--type=docs", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]]
+        "docs": [["init", "--type=docs", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
       }
     },
     "processkit": {
@@ -67,9 +67,9 @@
       "bin": "bin/processkit.mjs",
       "types": ["docs", "fe", "be"],
       "invocations": {
-        "docs": [["init", "--type=docs", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]],
-        "fe": [["init", "--type=fe", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]],
-        "be": [["init", "--type=be", "--target=cursor", "--yes", "--project-root={projectRoot}", "{force}"]]
+        "docs": [["init", "--type=docs", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "fe": [["init", "--type=fe", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]],
+        "be": [["init", "--type=be", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
       }
     },
     "codegenkit": {
@@ -98,10 +98,10 @@
       "bin": "bin/artifactgraph.mjs",
       "types": ["docs", "fe", "be", "tests"],
       "invocations": {
-        "docs": [["init", "--type=common,docs", "--target=cursor", "--location=local", "--yes"]],
-        "fe": [["init", "--type=common,fe", "--target=cursor", "--location=local", "--yes"]],
-        "be": [["init", "--type=common,be", "--target=cursor", "--location=local", "--yes"]],
-        "tests": [["init", "--type=common,test", "--target=cursor", "--location=local", "--yes"]]
+        "docs": [["init", "--type=common,docs", "--target={target}", "--location=local", "--yes"]],
+        "fe": [["init", "--type=common,fe", "--target={target}", "--location=local", "--yes"]],
+        "be": [["init", "--type=common,be", "--target={target}", "--location=local", "--yes"]],
+        "tests": [["init", "--type=common,test", "--target={target}", "--location=local", "--yes"]]
       }
     }
   }

@@ -27,6 +27,7 @@ import {
   installProfilePackages,
   resolvePackageSet,
 } from '../dist/install/packages.js'
+import { resolveInitWizard } from '../dist/install/init-wizard.js'
 import { validateTarget } from '../dist/profile/detect.js'
 import { loadProfiles } from '../dist/profile/manifest.js'
 import {
@@ -114,6 +115,88 @@ test('profile manifest freezes recommended package sets and supported adapters',
   assert.deepEqual(packageContract.skillsByType.docs, [])
   assert.deepEqual(packageContract.skillsByType.fe, ['platform-base'])
   assert.deepEqual(packageContract.ownedRules, [])
+})
+
+test('init wizard prompts agents before lane and adapter with detected agents pre-checked', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-'))
+  const order = []
+  const selection = await resolveInitWizard({
+    root,
+    manifest,
+    interactive: true,
+    detectedAgents: ['claude', 'cursor'],
+    prompts: {
+      async checkbox(opts) {
+        order.push('agent')
+        assert.deepEqual(
+          opts.choices.filter((choice) => choice.checked).map((choice) => choice.value),
+          ['claude', 'cursor'],
+        )
+        assert.match(opts.choices.find((choice) => choice.value === 'cursor').name, /detected/)
+        return ['cursor', 'claude']
+      },
+      async select(opts) {
+        if (opts.message.includes('destination lane')) {
+          order.push('lane')
+          return 'fe'
+        }
+        order.push('adapter')
+        return 'nextjs'
+      },
+    },
+  })
+
+  assert.deepEqual(order, ['agent', 'lane', 'adapter'])
+  assert.deepEqual(selection, {
+    targets: ['cursor', 'claude'],
+    target: 'cursor,claude',
+    type: 'fe',
+    adapter: 'nextjs',
+  })
+})
+
+test('non-interactive init keeps cursor and docs defaults', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-default-'))
+  const selection = await resolveInitWizard({
+    root,
+    manifest,
+    interactive: false,
+    detectedAgents: ['claude'],
+  })
+  assert.deepEqual(selection, {
+    targets: ['cursor'],
+    target: 'cursor',
+    type: 'docs',
+    adapter: undefined,
+  })
+})
+
+test('declared project role locks the interactive lane', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-role-'))
+  writeFileSync(
+    path.join(root, 'platform-repos.json'),
+    JSON.stringify({ projects: { portal: { root: '.', role: 'portal' } } }),
+  )
+  const prompts = []
+  const selection = await resolveInitWizard({
+    root,
+    manifest,
+    interactive: true,
+    detectedAgents: ['cursor'],
+    prompts: {
+      async checkbox() {
+        prompts.push('agent')
+        return ['cursor']
+      },
+      async select(opts) {
+        prompts.push(opts.message)
+        return 'nuxt4'
+      },
+    },
+  })
+  assert.deepEqual(prompts, ['agent', 'Select the FE adapter:'])
+  assert.equal(selection.type, 'fe')
+  assert.equal(selection.adapter, 'nuxt4')
 })
 
 for (const [type, adapter] of [
@@ -286,6 +369,7 @@ test('FE docs pointer is forwarded to Codegenkit and Hubdocs consumer profile', 
     type: 'fe',
     packageIds,
     projectRoot: root,
+    target: 'cursor,claude',
     adapter: 'nuxt4',
     docsRoot,
     dryRun: true,
@@ -295,8 +379,11 @@ test('FE docs pointer is forwarded to Codegenkit and Hubdocs consumer profile', 
   assert.ok(codegen.argv.includes(`--docs-root=${docsRoot}`))
   const hubdocs = plan.filter((step) => step.packageId === 'hubdocs')
   assert.equal(hubdocs.length, 2)
+  assert.ok(hubdocs[0].argv.includes('--target=cursor,claude'))
   assert.ok(hubdocs[0].argv.includes(`--docs-root=${docsRoot}`))
   assert.ok(hubdocs[1].argv.includes('--type=consumer'))
+  const processkit = plan.find((step) => step.packageId === 'processkit')
+  assert.ok(processkit.argv.includes('--target=cursor,claude'))
 })
 
 test('dotnet adapters validate and drop Testkit from Line FE recommended set', () => {
@@ -499,6 +586,25 @@ test('CLI status and dry-run-by-default prune expose managed lifecycle', () => {
   )
   assert.equal(apply.status, 0, apply.stderr)
   assert.equal(existsSync(platformBase), false)
+})
+
+test('CLI init --yes keeps the legacy cursor target default', () => {
+  const root = target('docs')
+  const result = spawnSync(
+    process.execPath,
+    ['dist/cli.js', 'init', '--project-root', root, '--dry-run', '--yes'],
+    { cwd: path.resolve('.'), encoding: 'utf8' },
+  )
+  assert.equal(result.status, 0, result.stderr)
+  const output = JSON.parse(result.stdout)
+  assert.deepEqual(output.targets, ['cursor'])
+  assert.equal(output.type, 'docs')
+  assert.ok(
+    output.invocations
+      .flatMap((step) => step.argv)
+      .filter((value) => value.startsWith('--target='))
+      .every((value) => value === '--target=cursor'),
+  )
 })
 
 test('install ledger records installs, discovery recovers them, and deinit forgets', () => {
