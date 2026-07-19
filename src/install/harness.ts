@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmdirSync,
   unlinkSync,
   statSync,
   writeFileSync,
@@ -15,6 +16,8 @@ import {
   packageVersion,
   type ProfileType,
 } from '../config/project-root.js'
+import type { SeededProjectMap } from './maps.js'
+import { forgetInstall, recordInstall } from './ledger.js'
 
 export interface InstallManifestFile {
   source: string
@@ -29,6 +32,8 @@ export interface InstallManifest {
   type: ProfileType
   harnessApi: 1
   files: Record<string, InstallManifestFile>
+  maps?: Record<string, { sha256: string }>
+  gitignoreEntryAdded?: boolean
 }
 
 export interface HarnessFileStatus extends InstallManifestFile {
@@ -49,6 +54,15 @@ export interface PruneHarnessResult {
   planned: string[]
   deleted: string[]
   skipped: HarnessFileStatus[]
+}
+
+export interface UninstallHarnessResult {
+  dryRun: boolean
+  wouldDelete: string[]
+  deleted: string[]
+  preservedModified: string[]
+  missing: string[]
+  manifestRemoved: boolean
 }
 
 function hash(content: string): string {
@@ -177,6 +191,26 @@ export function validateInstallManifest(value: unknown): InstallManifest {
   for (const [relative, file] of Object.entries(value.files)) {
     files[relative] = validateManifestFile(relative, file)
   }
+  const maps: NonNullable<InstallManifest['maps']> = {}
+  if (value.maps !== undefined) {
+    if (!isRecord(value.maps)) throw new Error('Invalid Platform DNA install manifest maps')
+    for (const [relative, record] of Object.entries(value.maps)) {
+      if (
+        !['platform-repos.json', 'platform-repos.example.json'].includes(relative) ||
+        !isRecord(record) ||
+        !sha256Pattern.test(String(record.sha256 ?? ''))
+      ) {
+        throw new Error(`Invalid Platform DNA managed map record: ${relative}`)
+      }
+      maps[relative] = { sha256: String(record.sha256) }
+    }
+  }
+  if (
+    value.gitignoreEntryAdded !== undefined &&
+    typeof value.gitignoreEntryAdded !== 'boolean'
+  ) {
+    throw new Error('Invalid Platform DNA install manifest gitignoreEntryAdded')
+  }
   return {
     schemaVersion: 1,
     package: '@platform/platform-dna',
@@ -184,6 +218,8 @@ export function validateInstallManifest(value: unknown): InstallManifest {
     type: value.type as ProfileType,
     harnessApi: 1,
     files,
+    ...(Object.keys(maps).length ? { maps } : {}),
+    ...(value.gitignoreEntryAdded === true ? { gitignoreEntryAdded: true } : {}),
   }
 }
 
@@ -299,6 +335,8 @@ export function installHarness(opts: {
   type: ProfileType
   adapter?: string
   force?: boolean
+  seededMaps?: SeededProjectMap[]
+  gitignoreAdded?: boolean
 }): { written: string[]; unchanged: string[]; conflicts: string[] } {
   const targetRoot = path.resolve(opts.root)
   const previous = readInstallManifest(targetRoot)
@@ -369,9 +407,105 @@ export function installHarness(opts: {
     type: opts.type,
     harnessApi: 1,
     files,
+    maps: opts.seededMaps
+      ? Object.fromEntries(
+          opts.seededMaps
+            .filter((map) => map.created || previous?.maps?.[map.path])
+            .map((map) => [map.path, { sha256: map.sha256 }]),
+        )
+      : previous?.maps,
+    gitignoreEntryAdded: Boolean(opts.gitignoreAdded || previous?.gitignoreEntryAdded),
   }
   const installManifest = targetPath(targetRoot, '.platform-dna/install-manifest.json')
   mkdirSync(path.dirname(installManifest), { recursive: true })
   writeFileSync(installManifest, `${JSON.stringify(manifest, null, 2)}\n`)
+  recordInstall(targetRoot)
+  return result
+}
+
+function removeGitignoreEntry(root: string, dryRun: boolean): string | undefined {
+  const file = targetPath(root, '.gitignore')
+  if (!existsSync(file) || !lstatSync(file).isFile()) return undefined
+  const current = readFileSync(file, 'utf8')
+  const lines = current.split(/\r?\n/)
+  if (!lines.includes('platform-repos.local.json')) return undefined
+  if (!dryRun) {
+    const updated = lines.filter((line) => line !== 'platform-repos.local.json').join('\n')
+    writeFileSync(file, updated)
+  }
+  return file
+}
+
+/**
+ * Remove only assets proven to be Platform-DNA-owned by the validated manifest.
+ * Member-modified files and maps that predated manifest ownership are preserved.
+ */
+export function uninstallHarness(opts: {
+  root: string
+  yes?: boolean
+}): UninstallHarnessResult {
+  const targetRoot = path.resolve(opts.root)
+  const manifest = readInstallManifest(targetRoot)
+  const dryRun = !opts.yes
+  const result: UninstallHarnessResult = {
+    dryRun,
+    wouldDelete: [],
+    deleted: [],
+    preservedModified: [],
+    missing: [],
+    manifestRemoved: false,
+  }
+  if (!manifest) return result
+
+  const owned = [
+    ...Object.entries(manifest.files).map(([relative, file]) => [
+      relative,
+      file.sha256,
+    ] as const),
+    ...Object.entries(manifest.maps ?? {}).map(([relative, file]) => [
+      relative,
+      file.sha256,
+    ] as const),
+  ]
+  for (const [relative, expectedHash] of owned) {
+    const target = targetPath(targetRoot, relative)
+    if (!existsSync(target)) {
+      result.missing.push(target)
+      continue
+    }
+    if (
+      !lstatSync(target).isFile() ||
+      hash(readFileSync(target, 'utf8')) !== expectedHash
+    ) {
+      result.preservedModified.push(target)
+      continue
+    }
+    if (dryRun) result.wouldDelete.push(target)
+    else {
+      unlinkSync(target)
+      result.deleted.push(target)
+    }
+  }
+
+  if (manifest.gitignoreEntryAdded) {
+    const gitignore = removeGitignoreEntry(targetRoot, dryRun)
+    if (gitignore) (dryRun ? result.wouldDelete : result.deleted).push(`${gitignore} entry`)
+  }
+
+  const installManifest = targetPath(targetRoot, '.platform-dna/install-manifest.json')
+  if (dryRun) {
+    result.wouldDelete.push(installManifest)
+    return result
+  }
+  if (existsSync(installManifest)) {
+    unlinkSync(installManifest)
+    result.manifestRemoved = true
+  }
+  forgetInstall(targetRoot)
+  try {
+    rmdirSync(path.dirname(installManifest))
+  } catch {
+    // Preserve non-empty local Platform DNA config.
+  }
   return result
 }

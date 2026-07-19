@@ -1,3 +1,5 @@
+import { lstatSync, rmSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import {
   packageRoot,
@@ -12,6 +14,7 @@ import {
   getHarnessStatus,
   installHarness,
   pruneHarness,
+  uninstallHarness,
 } from './install/harness.js'
 import { assertPortableMap, seedProjectMaps } from './install/maps.js'
 import {
@@ -19,6 +22,12 @@ import {
   resolvePackageSet,
 } from './install/packages.js'
 import { selectPrompt } from './install/prompt.js'
+import {
+  discoverInstalls,
+  ledgerPath,
+  readLedger,
+  removeLedger,
+} from './install/ledger.js'
 
 const laneChoices: Array<{ value: ProfileType; name: string }> = [
   { value: 'docs', name: 'Docs' },
@@ -81,6 +90,8 @@ function usage(): never {
   validate --type=… [--adapter=…] [--project-root <path>]
   status [--project-root <path>]
   prune [--project-root <path>] [--yes] [--dry-run]
+  deinit [--project-root <path>] [--yes]
+  uninstall [--discover <dir>] [--yes]
   profile --type=…
   version
 
@@ -92,12 +103,120 @@ Specialist skills/tools remain owned by their package.
   process.exit(1)
 }
 
+function lexists(file: string): boolean {
+  try {
+    lstatSync(file)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function cliTargets(): string[] {
+  const installDir = path.resolve(
+    process.env.PLATFORM_DNA_INSTALL_DIR ??
+      path.join(os.homedir(), '.platform-dna', 'bootstrap'),
+  )
+  const binDir = path.resolve(
+    process.env.PLATFORM_DNA_BIN_DIR ?? path.join(os.homedir(), '.local', 'bin'),
+  )
+  return [
+    path.join(binDir, process.platform === 'win32' ? 'platform-dna.cmd' : 'platform-dna'),
+    installDir,
+  ]
+}
+
+function printRepoUninstall(root: string, yes: boolean): void {
+  console.log(`repo: ${root}`)
+  const result = uninstallHarness({ root, yes })
+  for (const file of result.wouldDelete) console.log(`  would delete: ${file}`)
+  for (const file of result.deleted) console.log(`  deleted: ${file}`)
+  for (const file of result.preservedModified) console.log(`  preserve modified: ${file}`)
+  for (const file of result.missing) console.log(`  already missing: ${file}`)
+  if (result.manifestRemoved) {
+    console.log(`  manifest removed: ${path.join(root, '.platform-dna/install-manifest.json')}`)
+  }
+}
+
+function runLifecycle(scope: 'repo' | 'all', yes: boolean): void {
+  if (scope === 'repo') {
+    printRepoUninstall(resolveProjectRoot(arg('--project-root')), yes)
+    return
+  }
+
+  const repos = new Set(readLedger())
+  const discover = arg('--discover')
+  if (discover) {
+    for (const root of discoverInstalls(discover)) repos.add(root)
+  }
+  if (!repos.size) console.log('  (no registered repos — try --discover <dir>)')
+  for (const root of repos) printRepoUninstall(root, yes)
+
+  for (const target of cliTargets()) {
+    if (!lexists(target)) continue
+    if (yes) {
+      try {
+        rmSync(target, { recursive: true, force: true })
+        console.log(`  removed: ${target}`)
+      } catch (error) {
+        console.log(`  preserve: ${target} (${error instanceof Error ? error.message : error})`)
+      }
+    } else {
+      console.log(`  would remove: ${target}`)
+    }
+  }
+  if (yes) {
+    if (removeLedger()) console.log(`  ledger removed: ${ledgerPath()}`)
+  } else {
+    console.log(`  would remove ledger: ${ledgerPath()}`)
+  }
+}
+
+async function runUninstall(scope: 'repo' | 'all'): Promise<void> {
+  const yes = has('--yes') && !has('--dry-run')
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY && !yes)
+  if (interactive) {
+    console.log(`\nPreview (${scope}):`)
+    runLifecycle(scope, false)
+    const confirmation = await selectPrompt<'yes' | 'no'>({
+      message:
+        scope === 'repo'
+          ? 'Apply platform-dna deinit for this repo?'
+          : 'Apply global platform-dna uninstall (all repos + CLI)?',
+      defaultIndex: 0,
+      choices: [
+        { value: 'no', name: 'No — cancel' },
+        { value: 'yes', name: 'Yes — remove now' },
+      ],
+    })
+    if (confirmation !== 'yes') {
+      console.log('Cancelled.')
+      return
+    }
+    console.log(`\nApplying (${scope}):`)
+    runLifecycle(scope, true)
+    console.log(`\nUninstalled (${scope}).`)
+    return
+  }
+  runLifecycle(scope, yes)
+  console.log(yes ? `\nUninstalled (${scope}).` : `\nDry-run (${scope}) — pass --yes to apply.`)
+}
+
 async function main(): Promise<void> {
   const command = process.argv[2]
   if (!command || command === 'help' || command === '--help') usage()
   if (command === 'version' || command === '--version') {
     console.log(`platform-dna ${packageVersion()}`)
     console.log(`packageRoot ${packageRoot()}`)
+    return
+  }
+
+  if (command === 'deinit') {
+    await runUninstall('repo')
+    return
+  }
+  if (command === 'uninstall') {
+    await runUninstall('all')
     return
   }
 
@@ -198,6 +317,8 @@ async function main(): Promise<void> {
     type,
     adapter,
     force: has('--force'),
+    seededMaps: maps.maps,
+    gitignoreAdded: maps.gitignoreAdded,
   })
   for (const file of harness.written) console.log(`  wrote: ${file}`)
   for (const file of harness.unchanged) console.log(`  unchanged: ${file}`)

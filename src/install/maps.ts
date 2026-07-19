@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ProfileType } from '../config/project-root.js'
@@ -28,16 +29,28 @@ function writeIfChanged(file: string, data: unknown): boolean {
   return true
 }
 
+function sha256(file: string): string {
+  return createHash('sha256').update(readFileSync(file)).digest('hex')
+}
+
+export interface SeededProjectMap {
+  path: 'platform-repos.json' | 'platform-repos.example.json'
+  sha256: string
+  created: boolean
+}
+
 export function seedProjectMaps(opts: {
   root: string
   type: ProfileType
   repoName?: string
   repoUrl?: string
-}): { written: string[]; unchanged: string[] } {
+}): { written: string[]; unchanged: string[]; maps: SeededProjectMap[]; gitignoreAdded: boolean } {
   const root = path.resolve(opts.root)
   const repoName = opts.repoName ?? path.basename(root)
   const platformFile = path.join(root, 'platform-repos.json')
   const exampleFile = path.join(root, 'platform-repos.example.json')
+  const platformExisted = existsSync(platformFile)
+  const exampleExisted = existsSync(exampleFile)
   assertPortableMap(platformFile)
   assertPortableMap(exampleFile)
 
@@ -101,5 +114,21 @@ export function seedProjectMaps(opts: {
   } else {
     unchanged.push(gitignore)
   }
-  return { written, unchanged }
+  return {
+    written,
+    unchanged,
+    maps: [
+      {
+        path: 'platform-repos.json',
+        sha256: sha256(platformFile),
+        created: !platformExisted,
+      },
+      {
+        path: 'platform-repos.example.json',
+        sha256: sha256(exampleFile),
+        created: !exampleExisted,
+      },
+    ],
+    gitignoreAdded: additions.length > 0,
+  }
 }

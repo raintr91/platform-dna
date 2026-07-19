@@ -6,6 +6,7 @@ export {
   installHarness,
   pruneHarness,
   readInstallManifest,
+  uninstallHarness,
   validateInstallManifest,
 } from './install/harness.js'
 export type {
@@ -14,8 +15,19 @@ export type {
   InstallManifest,
   InstallManifestFile,
   PruneHarnessResult,
+  UninstallHarnessResult,
 } from './install/harness.js'
 export { assertPortableMap, seedProjectMaps } from './install/maps.js'
+export type { SeededProjectMap } from './install/maps.js'
+export {
+  discoverInstalls,
+  forgetInstall,
+  ledgerPath,
+  readLedger,
+  recordInstall,
+  removeLedger,
+  stateDir,
+} from './install/ledger.js'
 export {
   installProfilePackages,
   resolvePackageSet,

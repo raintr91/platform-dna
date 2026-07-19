@@ -47,13 +47,34 @@ Safety:
 - `platform-repos.local.json` remains member-owned and is added to `.gitignore`.
 - `--dry-run` prints package invocations without writing or cloning.
 - `.platform-dna/install-manifest.json` tracks active and stale Platform-DNA-owned
-  harness files. Switching among `docs`, `fe`, `be`, and `tests` marks old
-  profile-only assets stale.
+  harness files plus hashes for maps that Platform DNA itself seeded. Switching
+  among `docs`, `fe`, `be`, and `tests` marks old profile-only assets stale.
 - `status` reports missing, modified, and unmodified managed files. `prune` is
   dry-run by default and deletes only stale files whose current SHA-256 still
   matches the install manifest; use `--yes` to apply.
 - Pruning never considers project maps, `.gitignore`, specialist toolkit files,
   or any path absent from the validated Platform DNA install manifest.
+
+## Remove Platform DNA
+
+The lifecycle has two levels:
+
+```bash
+platform-dna deinit                         # this destination repo only
+platform-dna uninstall                      # every registered repo + CLI
+platform-dna uninstall --discover ~/workspace  # include older ledger-less installs
+```
+
+Both commands preview changes and ask for confirmation in a TTY. They are
+dry-runs outside a TTY unless `--yes` is passed. `init` records destinations in
+`$PLATFORM_DNA_STATE_DIR/installs.json`, or under
+`$XDG_STATE_HOME/platform-dna` by default.
+
+Removal uses the validated install manifest. Modified harness files and maps
+are preserved and reported. `platform-repos.json` and its example are removed
+only when Platform DNA created them and their current SHA-256 still matches the
+recorded value; pre-existing maps and every specialist toolkit asset are
+preserved. `prune` remains stale-only and never removes active assets.
 
 See [docs/PROFILES.md](./docs/PROFILES.md) and
 [docs/PROJECT-MAPS.md](./docs/PROJECT-MAPS.md).

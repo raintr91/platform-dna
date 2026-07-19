@@ -18,6 +18,8 @@ import {
   harnessSourceToTarget,
   installHarness,
   pruneHarness,
+  readInstallManifest,
+  uninstallHarness,
   validateInstallManifest,
 } from '../dist/install/harness.js'
 import { assertPortableMap, seedProjectMaps } from '../dist/install/maps.js'
@@ -27,8 +29,15 @@ import {
 } from '../dist/install/packages.js'
 import { validateTarget } from '../dist/profile/detect.js'
 import { loadProfiles } from '../dist/profile/manifest.js'
+import {
+  discoverInstalls,
+  ledgerPath,
+  readLedger,
+} from '../dist/install/ledger.js'
 
 const manifest = loadProfiles()
+const testState = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-state-'))
+process.env.PLATFORM_DNA_STATE_DIR = testState
 
 function target(type, adapter) {
   const root = mkdtempSync(path.join(os.tmpdir(), `platform-dna-${type}-`))
@@ -490,6 +499,137 @@ test('CLI status and dry-run-by-default prune expose managed lifecycle', () => {
   )
   assert.equal(apply.status, 0, apply.stderr)
   assert.equal(existsSync(platformBase), false)
+})
+
+test('install ledger records installs, discovery recovers them, and deinit forgets', () => {
+  const workspace = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-discover-'))
+  const root = path.join(workspace, 'docs')
+  mkdirSync(root)
+  installHarness({ root, type: 'docs' })
+
+  assert.ok(readLedger().includes(root))
+  assert.deepEqual(discoverInstalls(workspace), [root])
+  assert.ok(existsSync(ledgerPath()))
+
+  uninstallHarness({ root, yes: true })
+  assert.equal(readLedger().includes(root), false)
+})
+
+test('deinit removes only manifest-owned unchanged maps and preserves modified maps', () => {
+  const root = target('fe', 'nuxt4')
+  const maps = seedProjectMaps({ root, type: 'fe', repoName: 'portal' })
+  installHarness({
+    root,
+    type: 'fe',
+    adapter: 'nuxt4',
+    seededMaps: maps.maps,
+    gitignoreAdded: maps.gitignoreAdded,
+  })
+  const managed = readInstallManifest(root)
+  assert.ok(managed.maps['platform-repos.json'])
+
+  const platformMap = path.join(root, 'platform-repos.json')
+  const exampleMap = path.join(root, 'platform-repos.example.json')
+  writeFileSync(platformMap, `${readFileSync(platformMap, 'utf8')}\n`)
+
+  const preview = uninstallHarness({ root })
+  assert.ok(preview.preservedModified.includes(platformMap))
+  assert.ok(preview.wouldDelete.includes(exampleMap))
+  assert.ok(existsSync(exampleMap))
+
+  const applied = uninstallHarness({ root, yes: true })
+  assert.ok(applied.preservedModified.includes(platformMap))
+  assert.ok(existsSync(platformMap))
+  assert.equal(existsSync(exampleMap), false)
+  assert.equal(existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')), false)
+  assert.equal(existsSync(path.join(root, '.platform-dna/install-manifest.json')), false)
+  assert.doesNotMatch(readFileSync(path.join(root, '.gitignore'), 'utf8'), /platform-repos\.local/)
+})
+
+test('deinit preserves a project map that predated Platform DNA ownership', () => {
+  const root = target('docs')
+  writeFileSync(
+    path.join(root, 'platform-repos.json'),
+    JSON.stringify({ defaultGroup: 'docs', groups: {}, projects: {} }),
+  )
+  const maps = seedProjectMaps({ root, type: 'docs', repoName: 'docs' })
+  installHarness({
+    root,
+    type: 'docs',
+    seededMaps: maps.maps,
+    gitignoreAdded: maps.gitignoreAdded,
+  })
+  assert.equal(readInstallManifest(root).maps['platform-repos.json'], undefined)
+
+  uninstallHarness({ root, yes: true })
+  assert.ok(existsSync(path.join(root, 'platform-repos.json')))
+})
+
+test('CLI contract: deinit is local and uninstall is global dry-run by default', () => {
+  const root = target('docs')
+  installHarness({ root, type: 'docs' })
+  const deinit = spawnSync(
+    process.execPath,
+    ['dist/cli.js', 'deinit', '--project-root', root, '--yes'],
+    {
+      cwd: path.resolve('.'),
+      encoding: 'utf8',
+      env: { ...process.env, PLATFORM_DNA_STATE_DIR: testState },
+    },
+  )
+  assert.equal(deinit.status, 0, deinit.stderr)
+  assert.match(deinit.stdout, /Uninstalled \(repo\)/)
+
+  const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-home-'))
+  const global = spawnSync(process.execPath, ['dist/cli.js', 'uninstall'], {
+    cwd: path.resolve('.'),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      HOME: fakeHome,
+      PLATFORM_DNA_STATE_DIR: path.join(fakeHome, 'state'),
+      PLATFORM_DNA_INSTALL_DIR: path.join(fakeHome, 'bootstrap'),
+      PLATFORM_DNA_BIN_DIR: path.join(fakeHome, 'bin'),
+    },
+  })
+  assert.equal(global.status, 0, global.stderr)
+  assert.match(global.stdout, /Dry-run \(all\)/)
+})
+
+test('global uninstall applies ledger repo and CLI removal from another directory', () => {
+  const root = target('docs')
+  installHarness({ root, type: 'docs' })
+  const fakeHome = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-global-'))
+  const state = path.join(fakeHome, 'state')
+  const installDir = path.join(fakeHome, 'bootstrap')
+  const binDir = path.join(fakeHome, 'bin')
+  mkdirSync(state, { recursive: true })
+  mkdirSync(installDir, { recursive: true })
+  mkdirSync(binDir, { recursive: true })
+  writeFileSync(
+    path.join(state, 'installs.json'),
+    `${JSON.stringify({ version: 1, repos: [root] })}\n`,
+  )
+  writeFileSync(path.join(installDir, 'package.json'), '{}\n')
+  writeFileSync(path.join(binDir, 'platform-dna'), 'shim\n')
+
+  const result = spawnSync(process.execPath, [path.resolve('dist/cli.js'), 'uninstall', '--yes'], {
+    cwd: fakeHome,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      HOME: fakeHome,
+      PLATFORM_DNA_STATE_DIR: state,
+      PLATFORM_DNA_INSTALL_DIR: installDir,
+      PLATFORM_DNA_BIN_DIR: binDir,
+    },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /Uninstalled \(all\)/)
+  assert.equal(existsSync(path.join(root, '.platform-dna/install-manifest.json')), false)
+  assert.equal(existsSync(installDir), false)
+  assert.equal(existsSync(path.join(binDir, 'platform-dna')), false)
+  assert.equal(existsSync(path.join(state, 'installs.json')), false)
 })
 
 test('installers pin the immutable release and enforce lockfiles', () => {
