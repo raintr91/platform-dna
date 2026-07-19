@@ -1,0 +1,33 @@
+---
+description: Cross-repo index routing — call the correct per-repo index, never one giant workspace graph.
+alwaysApply: true
+---
+
+# Cross-repo index routing (SSOT)
+
+Do not merge every repository into a single workspace graph (the parent folder
+must never be indexed). "Cross-repo" means a skill/rule knows how to reach the
+**correct per-repo index**, one repository at a time.
+
+Route by intent:
+
+- Need an architecture ID or C4 path -> Hubdocs MCP (`HUBDOCS_ROOT`). Never
+  CodeGraph for architecture Markdown.
+- Need IR / registry / generation -> the pointer kit
+  (`CODEGENKIT_DOCS_ROOT`, `TESTKIT_DOCS_ROOT`, `TESTKIT_TESTS_ROOT`).
+- Need a symbol or call-graph for repo `X` -> the CodeGraph MCP server for repo
+  `X` (`codegraph-<key>`, whose `--project-root` is `X`'s checkout). Do not use
+  the index of the repository currently open.
+
+Rules:
+
+- One `.codegraph/` per repository, created locally with `codegraph init` inside
+  that repo. Never run `codegraph init` in a workspace parent.
+- A repo without an index is reported, not auto-indexed; run the printed
+  `cd <root> && codegraph init` first.
+- ArtifactGraph stays local-only; it is never a shared index for FE, tests, or
+  legacy repositories.
+
+Platform DNA wires the `codegraph-<key>` servers into this repo's local
+`.cursor/mcp.json` from the machine-local maps (`platform-repos.local.json`,
+`legacy-repos.local.json`). Re-run `platform-dna codegraph:wire` to refresh.

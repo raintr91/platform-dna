@@ -19,9 +19,27 @@ import {
   installHarness,
   pruneHarness,
   readInstallManifest,
+  recordManagedExtras,
   uninstallHarness,
   validateInstallManifest,
 } from '../dist/install/harness.js'
+import {
+  canonicalGitignorePattern,
+  ensureGitignoreEntries,
+  removeGitignoreEntries,
+} from '../dist/install/gitignore.js'
+import {
+  mcpEntryHash,
+  mergeMcpServers,
+  removeMcpServers,
+} from '../dist/install/mcp-config.js'
+import {
+  isWsl,
+  normalizeRuntimePath,
+  planCodegraphServers,
+  readRepoRefs,
+  wireCodegraph,
+} from '../dist/install/codegraph.js'
 import { assertPortableMap, seedProjectMaps } from '../dist/install/maps.js'
 import {
   installProfilePackages,
@@ -117,7 +135,7 @@ test('profile manifest freezes recommended package sets and supported adapters',
   assert.deepEqual(packageContract.ownedRules, [])
 })
 
-test('init wizard prompts agents before lane and adapter with detected agents pre-checked', async () => {
+test('init wizard prompts agents, lane, adapter, optional toolkits, then codegraph', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-'))
   const order = []
   const selection = await resolveInitWizard({
@@ -125,34 +143,98 @@ test('init wizard prompts agents before lane and adapter with detected agents pr
     manifest,
     interactive: true,
     detectedAgents: ['claude', 'cursor'],
+    codegraphCandidateKeys: ['portal', 'api'],
     prompts: {
       async checkbox(opts) {
-        order.push('agent')
+        if (opts.message.includes('agents')) {
+          order.push('agent')
+          assert.deepEqual(
+            opts.choices.filter((choice) => choice.checked).map((choice) => choice.value),
+            ['claude', 'cursor'],
+          )
+          assert.match(opts.choices.find((choice) => choice.value === 'cursor').name, /detected/)
+          return ['cursor', 'claude']
+        }
+        order.push('optional')
+        // FE optional toolkits with install metadata are artifactgraph + hubdocs
         assert.deepEqual(
-          opts.choices.filter((choice) => choice.checked).map((choice) => choice.value),
-          ['claude', 'cursor'],
+          opts.choices.map((choice) => choice.value),
+          ['artifactgraph', 'hubdocs'],
         )
-        assert.match(opts.choices.find((choice) => choice.value === 'cursor').name, /detected/)
-        return ['cursor', 'claude']
+        return ['artifactgraph']
       },
       async select(opts) {
         if (opts.message.includes('destination lane')) {
           order.push('lane')
           return 'fe'
         }
-        order.push('adapter')
-        return 'nextjs'
+        if (opts.message.includes('adapter')) {
+          order.push('adapter')
+          return 'nextjs'
+        }
+        order.push('codegraph')
+        assert.match(opts.message, /2 repo/)
+        return 'yes'
       },
     },
   })
 
-  assert.deepEqual(order, ['agent', 'lane', 'adapter'])
+  assert.deepEqual(order, ['agent', 'lane', 'adapter', 'optional', 'codegraph'])
   assert.deepEqual(selection, {
     targets: ['cursor', 'claude'],
     target: 'cursor,claude',
     type: 'fe',
     adapter: 'nextjs',
+    withOptional: ['artifactgraph'],
+    wireCodegraph: true,
   })
+})
+
+test('init wizard lets the member skip optional toolkits and defer codegraph', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-skip-'))
+  const selection = await resolveInitWizard({
+    root,
+    manifest,
+    interactive: true,
+    detectedAgents: ['cursor'],
+    codegraphCandidateKeys: ['portal'],
+    prompts: {
+      async checkbox(opts) {
+        if (opts.message.includes('agents')) return ['cursor']
+        return [] // skip optional toolkits — init "trống"
+      },
+      async select(opts) {
+        if (opts.message.includes('destination lane')) return 'docs'
+        return 'later' // defer codegraph wiring
+      },
+    },
+  })
+  assert.deepEqual(selection.withOptional, [])
+  assert.equal(selection.wireCodegraph, false)
+})
+
+test('init wizard skips the codegraph step when no repos are declared', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-nocg-'))
+  const messages = []
+  const selection = await resolveInitWizard({
+    root,
+    manifest,
+    interactive: true,
+    detectedAgents: ['cursor'],
+    codegraphCandidateKeys: [],
+    prompts: {
+      async checkbox(opts) {
+        return opts.message.includes('agents') ? ['cursor'] : []
+      },
+      async select(opts) {
+        messages.push(opts.message)
+        return 'docs'
+      },
+    },
+  })
+  assert.ok(!messages.some((message) => message.includes('CodeGraph')))
+  // cursor selected but member never wired anything and there are no candidates
+  assert.equal(selection.wireCodegraph, true)
 })
 
 test('non-interactive init keeps cursor and docs defaults', async () => {
@@ -168,6 +250,8 @@ test('non-interactive init keeps cursor and docs defaults', async () => {
     target: 'cursor',
     type: 'docs',
     adapter: undefined,
+    withOptional: [],
+    wireCodegraph: true,
   })
 })
 
@@ -183,10 +267,11 @@ test('declared project role locks the interactive lane', async () => {
     manifest,
     interactive: true,
     detectedAgents: ['cursor'],
+    codegraphCandidateKeys: [],
     prompts: {
-      async checkbox() {
-        prompts.push('agent')
-        return ['cursor']
+      async checkbox(opts) {
+        prompts.push(opts.message.includes('agents') ? 'agent' : 'optional')
+        return opts.message.includes('agents') ? ['cursor'] : []
       },
       async select(opts) {
         prompts.push(opts.message)
@@ -194,7 +279,8 @@ test('declared project role locks the interactive lane', async () => {
       },
     },
   })
-  assert.deepEqual(prompts, ['agent', 'Select the FE adapter:'])
+  // No lane prompt (locked by role); no codegraph prompt (no candidates).
+  assert.deepEqual(prompts, ['agent', 'Select the FE adapter:', 'optional'])
   assert.equal(selection.type, 'fe')
   assert.equal(selection.adapter, 'nuxt4')
 })
@@ -605,6 +691,37 @@ test('CLI init --yes keeps the legacy cursor target default', () => {
       .filter((value) => value.startsWith('--target='))
       .every((value) => value === '--target=cursor'),
   )
+  assert.deepEqual(output.withOptional, [])
+})
+
+test('CLI init --with adds optional toolkits and --no-codegraph skips wiring', () => {
+  const root = target('docs')
+  const other = scratch('cli-with-other')
+  mkdirSync(path.join(other, '.codegraph'))
+  writeFileSync(
+    path.join(root, 'platform-repos.local.json'),
+    JSON.stringify({ projects: { portal: { root: other } } }),
+  )
+  const result = spawnSync(
+    process.execPath,
+    [
+      'dist/cli.js',
+      'init',
+      '--project-root',
+      root,
+      '--dry-run',
+      '--yes',
+      '--with=artifactgraph',
+      '--no-codegraph',
+    ],
+    { cwd: path.resolve('.'), encoding: 'utf8' },
+  )
+  assert.equal(result.status, 0, result.stderr)
+  const output = JSON.parse(result.stdout)
+  assert.deepEqual(output.withOptional, ['artifactgraph'])
+  assert.ok(output.packageIds.includes('artifactgraph'))
+  assert.equal(output.wireCodegraph, false)
+  assert.deepEqual(output.codegraphCandidates, ['portal'])
 })
 
 test('install ledger records installs, discovery recovers them, and deinit forgets', () => {
@@ -629,7 +746,7 @@ test('deinit removes only manifest-owned unchanged maps and preserves modified m
     type: 'fe',
     adapter: 'nuxt4',
     seededMaps: maps.maps,
-    gitignoreAdded: maps.gitignoreAdded,
+    gitignoreEntries: maps.gitignoreEntries,
   })
   const managed = readInstallManifest(root)
   assert.ok(managed.maps['platform-repos.json'])
@@ -663,7 +780,7 @@ test('deinit preserves a project map that predated Platform DNA ownership', () =
     root,
     type: 'docs',
     seededMaps: maps.maps,
-    gitignoreAdded: maps.gitignoreAdded,
+    gitignoreEntries: maps.gitignoreEntries,
   })
   assert.equal(readInstallManifest(root).maps['platform-repos.json'], undefined)
 
@@ -739,13 +856,275 @@ test('global uninstall applies ledger repo and CLI removal from another director
 })
 
 test('installers pin the immutable release and enforce lockfiles', () => {
+  const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
   for (const script of [
     readFileSync('install.sh', 'utf8'),
     readFileSync('install.ps1', 'utf8'),
   ]) {
-    assert.match(script, /v0\.3\.0/)
+    // Installers must pin the tag of the version being released.
+    assert.match(script, new RegExp(`v${version.replace(/\./g, '\\.')}`))
     assert.match(script, /pnpm install --frozen-lockfile/)
     assert.match(script, /npm ci/)
     assert.doesNotMatch(script, /(?:REF:-main|Ref = "main")/)
   }
+})
+
+function scratch(prefix) {
+  return mkdtempSync(path.join(os.tmpdir(), `platform-dna-${prefix}-`))
+}
+
+test('ensureGitignoreEntries creates the file when missing and is idempotent', () => {
+  const root = scratch('gi-new')
+  const first = ensureGitignoreEntries(root, ['platform-repos.local.json'])
+  assert.equal(first.changed, true)
+  assert.deepEqual(first.added, ['platform-repos.local.json'])
+  assert.equal(
+    readFileSync(path.join(root, '.gitignore'), 'utf8'),
+    'platform-repos.local.json\n',
+  )
+  const second = ensureGitignoreEntries(root, ['platform-repos.local.json'])
+  assert.equal(second.changed, false)
+  assert.deepEqual(second.added, [])
+})
+
+test('ensureGitignoreEntries treats .cursor/ and /.cursor/ as equivalent', () => {
+  assert.equal(canonicalGitignorePattern('/.cursor/'), canonicalGitignorePattern('.cursor'))
+  const root = scratch('gi-equiv')
+  writeFileSync(path.join(root, '.gitignore'), '/.cursor/\n')
+  const result = ensureGitignoreEntries(root, ['.cursor/', 'dist'])
+  assert.deepEqual(result.added, ['dist'])
+  assert.equal(readFileSync(path.join(root, '.gitignore'), 'utf8'), '/.cursor/\ndist\n')
+})
+
+test('ensureGitignoreEntries preserves member content and CRLF EOL', () => {
+  const root = scratch('gi-crlf')
+  writeFileSync(path.join(root, '.gitignore'), 'node_modules\r\n.env\r\n')
+  const result = ensureGitignoreEntries(root, ['platform-repos.local.json'])
+  assert.equal(result.changed, true)
+  const body = readFileSync(path.join(root, '.gitignore'), 'utf8')
+  assert.equal(body, 'node_modules\r\n.env\r\nplatform-repos.local.json\r\n')
+})
+
+test('ensureGitignoreEntries appends a newline before adding to a no-trailing-newline file', () => {
+  const root = scratch('gi-nonl')
+  writeFileSync(path.join(root, '.gitignore'), 'node_modules')
+  ensureGitignoreEntries(root, ['dist'])
+  assert.equal(readFileSync(path.join(root, '.gitignore'), 'utf8'), 'node_modules\ndist\n')
+})
+
+test('removeGitignoreEntries removes only the targeted lines', () => {
+  const root = scratch('gi-remove')
+  writeFileSync(path.join(root, '.gitignore'), 'node_modules\nplatform-repos.local.json\n.env\n')
+  const result = removeGitignoreEntries(root, ['platform-repos.local.json'])
+  assert.deepEqual(result.removed, ['platform-repos.local.json'])
+  assert.equal(readFileSync(path.join(root, '.gitignore'), 'utf8'), 'node_modules\n.env\n')
+})
+
+test('two toolkits needing .cursor/ do not duplicate the entry', () => {
+  const root = scratch('gi-shared')
+  ensureGitignoreEntries(root, ['.cursor/mcp.json'])
+  const second = ensureGitignoreEntries(root, ['.cursor/mcp.json'])
+  assert.equal(second.changed, false)
+  const lines = readFileSync(path.join(root, '.gitignore'), 'utf8').trim().split('\n')
+  assert.equal(lines.filter((line) => line === '.cursor/mcp.json').length, 1)
+})
+
+test('deinit removes exclusive ignore entries but keeps shared ones', () => {
+  const root = target('docs')
+  ensureGitignoreEntries(root, ['platform-repos.local.json', '.cursor/mcp.json'])
+  installHarness({
+    root,
+    type: 'docs',
+    gitignoreEntries: [
+      { pattern: 'platform-repos.local.json', shared: false },
+      { pattern: '.cursor/mcp.json', shared: true },
+    ],
+  })
+  uninstallHarness({ root, yes: true })
+  const body = readFileSync(path.join(root, '.gitignore'), 'utf8')
+  assert.doesNotMatch(body, /platform-repos\.local\.json/)
+  assert.match(body, /\.cursor\/mcp\.json/)
+})
+
+test('mergeMcpServers preserves member entries and is idempotent', () => {
+  const root = scratch('mcp-merge')
+  const file = path.join(root, '.cursor', 'mcp.json')
+  mkdirSync(path.dirname(file), { recursive: true })
+  writeFileSync(
+    file,
+    JSON.stringify({ mcpServers: { member: { command: 'x', args: [] } } }, null, 2),
+  )
+  const first = mergeMcpServers(file, {
+    'codegraph-portal': { command: 'codegraph', args: ['mcp', '--project-root', '/repo'] },
+  })
+  assert.deepEqual(first.added, ['codegraph-portal'])
+  const parsed = JSON.parse(readFileSync(file, 'utf8'))
+  assert.ok(parsed.mcpServers.member)
+  assert.ok(parsed.mcpServers['codegraph-portal'])
+
+  const second = mergeMcpServers(file, {
+    'codegraph-portal': { command: 'codegraph', args: ['mcp', '--project-root', '/repo'] },
+  })
+  assert.deepEqual(second.unchanged, ['codegraph-portal'])
+  assert.deepEqual(second.added, [])
+})
+
+test('removeMcpServers keeps member-modified entries and drops matching ones', () => {
+  const root = scratch('mcp-remove')
+  const file = path.join(root, '.cursor', 'mcp.json')
+  mkdirSync(path.dirname(file), { recursive: true })
+  const entry = { command: 'codegraph', args: ['mcp', '--project-root', '/repo'] }
+  const merge = mergeMcpServers(file, { 'codegraph-a': entry, 'codegraph-b': entry })
+
+  const bag = JSON.parse(readFileSync(file, 'utf8'))
+  bag.mcpServers['codegraph-b'].args.push('--edited')
+  writeFileSync(file, JSON.stringify(bag, null, 2))
+
+  const result = removeMcpServers(file, merge.hashes)
+  assert.deepEqual(result.removed, ['codegraph-a'])
+  assert.deepEqual(result.preservedModified, ['codegraph-b'])
+  const after = JSON.parse(readFileSync(file, 'utf8'))
+  assert.equal(after.mcpServers['codegraph-a'], undefined)
+  assert.ok(after.mcpServers['codegraph-b'])
+})
+
+test('normalizeRuntimePath handles WSL, Windows, and fail-closed cases', () => {
+  const prev = process.env.WSL_DISTRO_NAME
+  process.env.WSL_DISTRO_NAME = 'Ubuntu'
+  assert.equal(normalizeRuntimePath('D:\\code\\portal').path, '/mnt/d/code/portal')
+  assert.equal(normalizeRuntimePath('/home/vutv/portal').path, '/home/vutv/portal')
+  if (prev !== undefined) process.env.WSL_DISTRO_NAME = prev
+  else delete process.env.WSL_DISTRO_NAME
+
+  // A Windows drive path is only usable when this runtime is WSL or Windows;
+  // on plain Linux it must fail closed rather than be written verbatim.
+  const windowsPath = normalizeRuntimePath('D:\\code\\portal')
+  if (isWsl() || process.platform === 'win32') {
+    assert.ok(windowsPath.path)
+  } else {
+    assert.ok(windowsPath.error)
+  }
+})
+
+test('readRepoRefs reads both local maps and planCodegraphServers filters + normalizes', () => {
+  const root = scratch('cg-plan')
+  const other = scratch('cg-other')
+  mkdirSync(path.join(other, '.codegraph'))
+  const missing = path.join(root, 'does-not-exist')
+  writeFileSync(
+    path.join(root, 'platform-repos.local.json'),
+    JSON.stringify({ projects: { portal: { root: other }, ghost: { root: missing } } }),
+  )
+  writeFileSync(
+    path.join(root, 'legacy-repos.local.json'),
+    JSON.stringify({ projects: { legacy: { root: other } } }),
+  )
+  const refs = readRepoRefs(root)
+  assert.equal(refs.length, 3)
+
+  const plan = planCodegraphServers({ root })
+  const portal = plan.wire.find((server) => server.name === 'codegraph-portal')
+  assert.ok(portal)
+  assert.equal(portal.root, path.resolve(other))
+  assert.equal(portal.hasIndex, true)
+  assert.ok(plan.skipped.some((server) => server.name === 'codegraph-ghost'))
+
+  const filtered = planCodegraphServers({ root, filterKeys: ['portal'] })
+  assert.deepEqual(
+    filtered.wire.map((server) => server.name),
+    ['codegraph-portal'],
+  )
+})
+
+test('planCodegraphServers excludes the current repo and never wires un-indexed repos', () => {
+  const root = scratch('cg-self')
+  const other = scratch('cg-self-other')
+  writeFileSync(
+    path.join(root, 'platform-repos.local.json'),
+    JSON.stringify({ projects: { self: { root }, other: { root: other } } }),
+  )
+  const plan = planCodegraphServers({ root })
+  assert.ok(plan.skipped.some((server) => server.name === 'codegraph-self'))
+  // `other` exists but has no `.codegraph/`: reported for indexing, never wired.
+  const needs = plan.needsIndex.find((item) => item.key === 'other')
+  assert.ok(needs)
+  assert.equal(needs.hint, `cd ${path.resolve(other)} && codegraph init`)
+  assert.ok(!plan.wire.some((server) => server.name === 'codegraph-other'))
+})
+
+test('un-indexed repos are not merged into mcp.json; indexed repos still wire', () => {
+  const root = scratch('cg-gate')
+  const indexed = scratch('cg-gate-indexed')
+  const bare = scratch('cg-gate-bare')
+  mkdirSync(path.join(indexed, '.codegraph'))
+  writeFileSync(
+    path.join(root, 'platform-repos.local.json'),
+    JSON.stringify({ projects: { indexed: { root: indexed }, bare: { root: bare } } }),
+  )
+  const wire = wireCodegraph({ root })
+  assert.deepEqual(
+    wire.plan.wire.map((server) => server.name),
+    ['codegraph-indexed'],
+  )
+  assert.ok(wire.plan.needsIndex.some((item) => item.key === 'bare'))
+  const parsed = JSON.parse(readFileSync(path.join(root, '.cursor', 'mcp.json'), 'utf8'))
+  assert.ok(parsed.mcpServers['codegraph-indexed'])
+  assert.equal(parsed.mcpServers['codegraph-bare'], undefined)
+})
+
+test('wireCodegraph writes owned servers and deinit unwires exactly those', () => {
+  const root = target('docs')
+  const other = scratch('cg-wire-other')
+  mkdirSync(path.join(other, '.codegraph'))
+  writeFileSync(
+    path.join(root, 'platform-repos.local.json'),
+    JSON.stringify({ projects: { portal: { root: other } } }),
+  )
+  installHarness({ root, type: 'docs' })
+  const wire = wireCodegraph({ root })
+  assert.deepEqual(wire.merge.added, ['codegraph-portal'])
+  recordManagedExtras(root, {
+    gitignore: [{ pattern: '.cursor/mcp.json', shared: true }],
+    mcp: wire.manifestMcp,
+  })
+
+  const status = getHarnessStatus(root)
+  assert.deepEqual(
+    status.mcp.map((server) => [server.name, server.status]),
+    [['codegraph-portal', 'unmodified']],
+  )
+
+  const mcpFile = path.join(root, '.cursor', 'mcp.json')
+  assert.ok(JSON.parse(readFileSync(mcpFile, 'utf8')).mcpServers['codegraph-portal'])
+  uninstallHarness({ root, yes: true })
+  assert.equal(existsSync(mcpFile) ? JSON.parse(readFileSync(mcpFile, 'utf8')).mcpServers?.['codegraph-portal'] : undefined, undefined)
+})
+
+test('codegraph:wire CLI is idempotent and reports repos needing an index', () => {
+  const root = target('docs')
+  const indexed = scratch('cg-cli-indexed')
+  const bare = scratch('cg-cli-bare')
+  mkdirSync(path.join(indexed, '.codegraph'))
+  writeFileSync(
+    path.join(root, 'platform-repos.local.json'),
+    JSON.stringify({ projects: { indexed: { root: indexed }, bare: { root: bare } } }),
+  )
+  installHarness({ root, type: 'docs' })
+
+  const run = () =>
+    spawnSync(process.execPath, ['dist/cli.js', 'codegraph:wire', '--project-root', root], {
+      cwd: path.resolve('.'),
+      encoding: 'utf8',
+      env: { ...process.env, PLATFORM_DNA_STATE_DIR: testState },
+    })
+  const first = run()
+  assert.equal(first.status, 0, first.stderr)
+  assert.match(first.stdout, /wired codegraph-indexed/)
+  assert.match(first.stdout, /bare has no index yet/)
+
+  const manifest = readInstallManifest(root)
+  assert.ok(manifest.mcp.servers['codegraph-indexed'])
+  const second = run()
+  assert.equal(second.status, 0, second.stderr)
+  assert.match(second.stdout, /unchanged codegraph-indexed/)
 })

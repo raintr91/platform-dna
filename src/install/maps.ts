@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ProfileType } from '../config/project-root.js'
+import { ensureGitignoreEntries, type OwnedGitignoreEntry } from './gitignore.js'
 
 const PLATFORM_SCHEMA =
   'https://github.com/raintr91/platform-dna/blob/main/templates/schemas/platform-repos.schema.json'
@@ -44,7 +45,13 @@ export function seedProjectMaps(opts: {
   type: ProfileType
   repoName?: string
   repoUrl?: string
-}): { written: string[]; unchanged: string[]; maps: SeededProjectMap[]; gitignoreAdded: boolean } {
+}): {
+  written: string[]
+  unchanged: string[]
+  maps: SeededProjectMap[]
+  gitignoreAdded: boolean
+  gitignoreEntries: OwnedGitignoreEntry[]
+} {
   const root = path.resolve(opts.root)
   const repoName = opts.repoName ?? path.basename(root)
   const platformFile = path.join(root, 'platform-repos.json')
@@ -102,18 +109,17 @@ export function seedProjectMaps(opts: {
   ;(writeIfChanged(platformFile, data) ? written : unchanged).push(platformFile)
   ;(writeIfChanged(exampleFile, data) ? written : unchanged).push(exampleFile)
 
-  const gitignore = path.join(root, '.gitignore')
-  const existing = existsSync(gitignore) ? readFileSync(gitignore, 'utf8') : ''
-  const additions = ['platform-repos.local.json'].filter(
-    (line) => !existing.split(/\r?\n/).includes(line),
-  )
-  if (additions.length) {
-    const prefix = existing && !existing.endsWith('\n') ? '\n' : ''
-    writeFileSync(gitignore, `${existing}${prefix}${additions.join('\n')}\n`)
-    written.push(gitignore)
-  } else {
-    unchanged.push(gitignore)
-  }
+  // The machine-local map is the only ignore entry Platform DNA exclusively
+  // owns from seeding; it must never be committed (holds member checkout roots).
+  const gitignoreResult = ensureGitignoreEntries(root, ['platform-repos.local.json'])
+  ;(gitignoreResult.changed ? written : unchanged).push(gitignoreResult.file)
+  // Only claim ownership of entries this run actually added, so deinit never
+  // strips a line the member wrote themselves.
+  const gitignoreEntries: OwnedGitignoreEntry[] = gitignoreResult.added.map((pattern) => ({
+    pattern,
+    shared: false,
+  }))
+
   return {
     written,
     unchanged,
@@ -129,6 +135,7 @@ export function seedProjectMaps(opts: {
         created: !exampleExisted,
       },
     ],
-    gitignoreAdded: additions.length > 0,
+    gitignoreAdded: gitignoreResult.changed,
+    gitignoreEntries,
   }
 }

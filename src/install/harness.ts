@@ -18,11 +18,22 @@ import {
 } from '../config/project-root.js'
 import type { SeededProjectMap } from './maps.js'
 import { forgetInstall, recordInstall } from './ledger.js'
+import {
+  canonicalGitignorePattern,
+  removeGitignoreEntries,
+  type OwnedGitignoreEntry,
+} from './gitignore.js'
+import { mcpEntryHash, removeMcpServers } from './mcp-config.js'
 
 export interface InstallManifestFile {
   source: string
   sha256: string
   state: 'active' | 'stale'
+}
+
+export interface InstallManifestMcp {
+  file: string
+  servers: Record<string, { sha256: string }>
 }
 
 export interface InstallManifest {
@@ -33,7 +44,10 @@ export interface InstallManifest {
   harnessApi: 1
   files: Record<string, InstallManifestFile>
   maps?: Record<string, { sha256: string }>
-  gitignoreEntryAdded?: boolean
+  /** Exact `.gitignore` entries Platform DNA ensured, with shared-ownership. */
+  gitignore?: OwnedGitignoreEntry[]
+  /** Owned MCP server entries, so `status` can verify and `deinit` can unwire. */
+  mcp?: InstallManifestMcp
 }
 
 export interface HarnessFileStatus extends InstallManifestFile {
@@ -42,11 +56,24 @@ export interface HarnessFileStatus extends InstallManifestFile {
   prunable: boolean
 }
 
+export interface GitignoreEntryStatus {
+  pattern: string
+  shared: boolean
+  present: boolean
+}
+
+export interface McpServerStatus {
+  name: string
+  status: 'unmodified' | 'modified' | 'missing'
+}
+
 export interface HarnessStatus {
   manifestPath: string
   type: ProfileType
   packageVersion: string
   files: HarnessFileStatus[]
+  gitignore: GitignoreEntryStatus[]
+  mcp: McpServerStatus[]
 }
 
 export interface PruneHarnessResult {
@@ -205,12 +232,8 @@ export function validateInstallManifest(value: unknown): InstallManifest {
       maps[relative] = { sha256: String(record.sha256) }
     }
   }
-  if (
-    value.gitignoreEntryAdded !== undefined &&
-    typeof value.gitignoreEntryAdded !== 'boolean'
-  ) {
-    throw new Error('Invalid Platform DNA install manifest gitignoreEntryAdded')
-  }
+  const gitignore = validateManifestGitignore(value)
+  const mcp = validateManifestMcp(value.mcp)
   return {
     schemaVersion: 1,
     package: '@platform/platform-dna',
@@ -219,8 +242,64 @@ export function validateInstallManifest(value: unknown): InstallManifest {
     harnessApi: 1,
     files,
     ...(Object.keys(maps).length ? { maps } : {}),
-    ...(value.gitignoreEntryAdded === true ? { gitignoreEntryAdded: true } : {}),
+    ...(gitignore.length ? { gitignore } : {}),
+    ...(mcp ? { mcp } : {}),
   }
+}
+
+function validCanonicalPattern(pattern: string): boolean {
+  return Boolean(pattern) && !/[\r\n]/.test(pattern)
+}
+
+function validateManifestGitignore(value: Record<string, unknown>): OwnedGitignoreEntry[] {
+  // Back-compat: the boolean form only ever tracked the local project map.
+  if (value.gitignore === undefined) {
+    if (value.gitignoreEntryAdded === true) {
+      return [{ pattern: 'platform-repos.local.json', shared: false }]
+    }
+    if (value.gitignoreEntryAdded !== undefined && typeof value.gitignoreEntryAdded !== 'boolean') {
+      throw new Error('Invalid Platform DNA install manifest gitignoreEntryAdded')
+    }
+    return []
+  }
+  if (!Array.isArray(value.gitignore)) {
+    throw new Error('Invalid Platform DNA install manifest gitignore')
+  }
+  const seen = new Set<string>()
+  const entries: OwnedGitignoreEntry[] = []
+  for (const raw of value.gitignore) {
+    if (!isRecord(raw) || typeof raw.pattern !== 'string' || !validCanonicalPattern(raw.pattern)) {
+      throw new Error('Invalid Platform DNA install manifest gitignore entry')
+    }
+    if (raw.shared !== undefined && typeof raw.shared !== 'boolean') {
+      throw new Error('Invalid Platform DNA install manifest gitignore shared flag')
+    }
+    if (seen.has(raw.pattern)) continue
+    seen.add(raw.pattern)
+    entries.push({ pattern: raw.pattern, ...(raw.shared ? { shared: true } : {}) })
+  }
+  return entries
+}
+
+function validateManifestMcp(value: unknown): InstallManifestMcp | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new Error('Invalid Platform DNA install manifest mcp')
+  const file = normalizedRelative(String(value.file ?? ''), 'mcp file')
+  if (!file.startsWith('.cursor/') || path.posix.basename(file) !== 'mcp.json') {
+    throw new Error(`Invalid Platform DNA managed MCP file: ${file}`)
+  }
+  if (!isRecord(value.servers)) throw new Error('Invalid Platform DNA install manifest mcp servers')
+  const servers: InstallManifestMcp['servers'] = {}
+  for (const [name, record] of Object.entries(value.servers)) {
+    if (!/^codegraph-[A-Za-z0-9._-]+$/.test(name)) {
+      throw new Error(`Invalid Platform DNA managed MCP server name: ${name}`)
+    }
+    if (!isRecord(record) || !sha256Pattern.test(String(record.sha256 ?? ''))) {
+      throw new Error(`Invalid Platform DNA managed MCP server record: ${name}`)
+    }
+    servers[name] = { sha256: String(record.sha256) }
+  }
+  return { file, servers }
 }
 
 export function readInstallManifest(root: string): InstallManifest | undefined {
@@ -289,7 +368,51 @@ export function getHarnessStatus(root: string): HarnessStatus {
     files: Object.entries(manifest.files)
       .map(([relative, file]) => fileStatus(targetRoot, relative, file))
       .sort((left, right) => left.path.localeCompare(right.path)),
+    gitignore: gitignoreStatus(targetRoot, manifest),
+    mcp: mcpStatus(targetRoot, manifest),
   }
+}
+
+function gitignoreStatus(root: string, manifest: InstallManifest): GitignoreEntryStatus[] {
+  const entries = manifest.gitignore ?? []
+  if (!entries.length) return []
+  const file = path.join(root, '.gitignore')
+  const present = new Set<string>()
+  if (existsSync(file) && lstatSync(file).isFile()) {
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (trimmed && !trimmed.startsWith('#')) present.add(canonicalGitignorePattern(trimmed))
+    }
+  }
+  return entries.map((entry) => ({
+    pattern: entry.pattern,
+    shared: Boolean(entry.shared),
+    present: present.has(canonicalGitignorePattern(entry.pattern)),
+  }))
+}
+
+function mcpStatus(root: string, manifest: InstallManifest): McpServerStatus[] {
+  if (!manifest.mcp) return []
+  const file = targetPath(root, manifest.mcp.file)
+  let bag: Record<string, unknown> = {}
+  if (existsSync(file) && lstatSync(file).isFile()) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, 'utf8'))
+      if (isRecord(parsed) && isRecord(parsed.mcpServers)) {
+        bag = parsed.mcpServers as Record<string, unknown>
+      }
+    } catch {
+      bag = {}
+    }
+  }
+  return Object.entries(manifest.mcp.servers).map(([name, record]) => ({
+    name,
+    status: !(name in bag)
+      ? 'missing'
+      : mcpEntryHash(bag[name]) === record.sha256
+        ? 'unmodified'
+        : 'modified',
+  }))
 }
 
 export function pruneHarness(opts: { root: string; yes?: boolean }): PruneHarnessResult {
@@ -330,13 +453,43 @@ export function pruneHarness(opts: { root: string; yes?: boolean }): PruneHarnes
   return result
 }
 
+function mergeGitignore(
+  previous: OwnedGitignoreEntry[] | undefined,
+  next: OwnedGitignoreEntry[] | undefined,
+): OwnedGitignoreEntry[] {
+  const byPattern = new Map<string, OwnedGitignoreEntry>()
+  for (const entry of [...(previous ?? []), ...(next ?? [])]) {
+    const existing = byPattern.get(entry.pattern)
+    byPattern.set(entry.pattern, {
+      pattern: entry.pattern,
+      ...(entry.shared || existing?.shared ? { shared: true } : {}),
+    })
+  }
+  return [...byPattern.values()]
+}
+
+function mergeManifestMcp(
+  previous: InstallManifestMcp | undefined,
+  next: InstallManifestMcp | undefined,
+): InstallManifestMcp | undefined {
+  if (!previous && !next) return undefined
+  const file = next?.file ?? previous!.file
+  const servers = { ...(previous?.servers ?? {}) }
+  for (const [name, record] of Object.entries(next?.servers ?? {})) {
+    servers[name] = record
+  }
+  if (!Object.keys(servers).length) return undefined
+  return { file, servers }
+}
+
 export function installHarness(opts: {
   root: string
   type: ProfileType
   adapter?: string
   force?: boolean
   seededMaps?: SeededProjectMap[]
-  gitignoreAdded?: boolean
+  gitignoreEntries?: OwnedGitignoreEntry[]
+  mcp?: InstallManifestMcp
 }): { written: string[]; unchanged: string[]; conflicts: string[] } {
   const targetRoot = path.resolve(opts.root)
   const previous = readInstallManifest(targetRoot)
@@ -414,8 +567,11 @@ export function installHarness(opts: {
             .map((map) => [map.path, { sha256: map.sha256 }]),
         )
       : previous?.maps,
-    gitignoreEntryAdded: Boolean(opts.gitignoreAdded || previous?.gitignoreEntryAdded),
   }
+  const gitignore = mergeGitignore(previous?.gitignore, opts.gitignoreEntries)
+  if (gitignore.length) manifest.gitignore = gitignore
+  const mcp = mergeManifestMcp(previous?.mcp, opts.mcp)
+  if (mcp) manifest.mcp = mcp
   const installManifest = targetPath(targetRoot, '.platform-dna/install-manifest.json')
   mkdirSync(path.dirname(installManifest), { recursive: true })
   writeFileSync(installManifest, `${JSON.stringify(manifest, null, 2)}\n`)
@@ -423,17 +579,28 @@ export function installHarness(opts: {
   return result
 }
 
-function removeGitignoreEntry(root: string, dryRun: boolean): string | undefined {
-  const file = targetPath(root, '.gitignore')
-  if (!existsSync(file) || !lstatSync(file).isFile()) return undefined
-  const current = readFileSync(file, 'utf8')
-  const lines = current.split(/\r?\n/)
-  if (!lines.includes('platform-repos.local.json')) return undefined
-  if (!dryRun) {
-    const updated = lines.filter((line) => line !== 'platform-repos.local.json').join('\n')
-    writeFileSync(file, updated)
+/**
+ * Update only the managed gitignore/MCP metadata on an existing install (used by
+ * the idempotent `codegraph:wire` command without re-walking the harness tree).
+ */
+export function recordManagedExtras(
+  root: string,
+  opts: { gitignore?: OwnedGitignoreEntry[]; mcp?: InstallManifestMcp },
+): InstallManifest {
+  const targetRoot = path.resolve(root)
+  const manifest = readInstallManifest(targetRoot)
+  if (!manifest) {
+    throw new Error(`Platform DNA install manifest not found: ${manifestFile(targetRoot)}`)
   }
-  return file
+  const gitignore = mergeGitignore(manifest.gitignore, opts.gitignore)
+  if (gitignore.length) manifest.gitignore = gitignore
+  const mcp = mergeManifestMcp(manifest.mcp, opts.mcp)
+  if (mcp) manifest.mcp = mcp
+  writeFileSync(
+    targetPath(targetRoot, '.platform-dna/install-manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  )
+  return manifest
 }
 
 /**
@@ -487,9 +654,49 @@ export function uninstallHarness(opts: {
     }
   }
 
-  if (manifest.gitignoreEntryAdded) {
-    const gitignore = removeGitignoreEntry(targetRoot, dryRun)
-    if (gitignore) (dryRun ? result.wouldDelete : result.deleted).push(`${gitignore} entry`)
+  // Remove only exclusively-owned ignore entries; shared entries (for example
+  // `.cursor/mcp.json`) may still be relied on by another toolkit, so keep them.
+  const exclusiveIgnore = (manifest.gitignore ?? [])
+    .filter((entry) => !entry.shared)
+    .map((entry) => entry.pattern)
+  if (exclusiveIgnore.length) {
+    if (dryRun) {
+      const file = path.join(targetRoot, '.gitignore')
+      const present =
+        existsSync(file) && lstatSync(file).isFile()
+          ? new Set(
+              readFileSync(file, 'utf8')
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter((line) => line && !line.startsWith('#'))
+                .map(canonicalGitignorePattern),
+            )
+          : new Set<string>()
+      for (const pattern of exclusiveIgnore) {
+        if (present.has(canonicalGitignorePattern(pattern))) {
+          result.wouldDelete.push(`${file} entry: ${pattern}`)
+        }
+      }
+    } else {
+      const removed = removeGitignoreEntries(targetRoot, exclusiveIgnore)
+      for (const pattern of removed.removed) {
+        result.deleted.push(`${removed.file} entry: ${pattern}`)
+      }
+    }
+  }
+
+  if (manifest.mcp) {
+    const file = targetPath(targetRoot, manifest.mcp.file)
+    const expected = Object.fromEntries(
+      Object.entries(manifest.mcp.servers).map(([name, record]) => [name, record.sha256]),
+    )
+    const mcpResult = removeMcpServers(file, expected, { dryRun })
+    for (const name of mcpResult.removed) {
+      ;(dryRun ? result.wouldDelete : result.deleted).push(`${file} server: ${name}`)
+    }
+    for (const name of mcpResult.preservedModified) {
+      result.preservedModified.push(`${file} server: ${name}`)
+    }
   }
 
   const installManifest = targetPath(targetRoot, '.platform-dna/install-manifest.json')

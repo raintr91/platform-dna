@@ -12,6 +12,8 @@ import {
   getHarnessStatus,
   installHarness,
   pruneHarness,
+  readInstallManifest,
+  recordManagedExtras,
   uninstallHarness,
 } from './install/harness.js'
 import { assertPortableMap, seedProjectMaps } from './install/maps.js'
@@ -27,6 +29,9 @@ import {
   readLedger,
   removeLedger,
 } from './install/ledger.js'
+import { ensureGitignoreEntries, type OwnedGitignoreEntry } from './install/gitignore.js'
+import { CODEGRAPH_MCP_FILE, wireCodegraph, type WireCodegraphResult } from './install/codegraph.js'
+import type { InstallManifestMcp } from './install/harness.js'
 
 function arg(name: string): string | undefined {
   const equal = process.argv.find((value) => value.startsWith(`${name}=`))
@@ -67,13 +72,15 @@ function usage(): never {
   console.log(`platform-dna ${packageVersion()}
 
   init [--target=agent,…|auto|all|none] [--type=docs|fe|be|tests] [--adapter=…]
-       [--with=artifactgraph]
+       [--with=toolkit,…] [--codegraph | --no-codegraph] [--codegraph-repos=key,…]
        [--project-root <path>] [--docs-root <path>]
        [--repo-name <id>] [--repo-url <url>]
        [--package-root packageId=/path] [--no-install] [--force] [--dry-run] [--yes]
   validate --type=… [--adapter=…] [--project-root <path>]
   status [--project-root <path>]
   prune [--project-root <path>] [--yes] [--dry-run]
+  codegraph:wire [--project-root <path>] [--codegraph-repos=key,…]
+       [--include-self] [--dry-run] [--yes]
   deinit [--project-root <path>] [--yes]
   uninstall [--discover <dir>] [--yes]
   profile --type=…
@@ -108,6 +115,53 @@ function cliTargets(): string[] {
     path.join(binDir, process.platform === 'win32' ? 'platform-dna.cmd' : 'platform-dna'),
     installDir,
   ]
+}
+
+function reportCodegraphPlan(wire: WireCodegraphResult): void {
+  for (const server of wire.plan.wire) {
+    const merged =
+      wire.merge?.added.includes(server.name)
+        ? 'wired'
+        : wire.merge?.updated.includes(server.name)
+          ? 'updated'
+          : wire.merge
+            ? 'unchanged'
+            : 'planned'
+    console.log(`  codegraph: ${merged} ${server.name} → ${server.root}`)
+  }
+  for (const item of wire.plan.needsIndex) {
+    console.log(`  codegraph: ${item.key} has no index yet — run: ${item.hint}`)
+  }
+  for (const server of wire.plan.skipped) {
+    console.log(`  codegraph: skip ${server.name} (${server.skipped})`)
+  }
+}
+
+function runCodegraphWire(): void {
+  const root = resolveProjectRoot(arg('--project-root'))
+  const dryRun = has('--dry-run') && !has('--yes')
+  const wire = wireCodegraph({
+    root,
+    filterKeys: list('--codegraph-repos'),
+    includeSelf: has('--include-self'),
+    dryRun,
+  })
+  reportCodegraphPlan(wire)
+  if (wire.manifestMcp) {
+    const mcpIgnore = ensureGitignoreEntries(root, [CODEGRAPH_MCP_FILE])
+    if (mcpIgnore.changed) console.log(`  wrote: ${mcpIgnore.file} (${CODEGRAPH_MCP_FILE})`)
+    if (readInstallManifest(root)) {
+      recordManagedExtras(root, {
+        gitignore: [{ pattern: CODEGRAPH_MCP_FILE, shared: true }],
+        mcp: wire.manifestMcp,
+      })
+    }
+  }
+  console.log(
+    dryRun
+      ? `codegraph:wire dry-run (${root}) — pass --yes to apply.`
+      : `codegraph:wire complete (${root}).`,
+  )
 }
 
 function printRepoUninstall(root: string, yes: boolean): void {
@@ -218,18 +272,36 @@ async function main(): Promise<void> {
     if (result.dryRun) console.log('platform-dna prune: dry-run (pass --yes to delete)')
     return
   }
+  if (command === 'codegraph:wire') {
+    runCodegraphWire()
+    return
+  }
 
   const manifest = loadProfiles()
   const interactiveInit =
     command === 'init' &&
     !has('--yes') &&
     Boolean(process.stdin.isTTY && process.stdout.isTTY)
+  const codegraphFilter = list('--codegraph-repos')
+  const codegraphCandidateKeys =
+    command === 'init'
+      ? wireCodegraph({ root, filterKeys: codegraphFilter, dryRun: true }).plan.wire.map(
+          (server) => server.key,
+        )
+      : []
   const selection = await resolveInitWizard({
     root,
     manifest,
     requestedTarget: arg('--target'),
     requestedType: arg('--type'),
     requestedAdapter: arg('--adapter'),
+    requestedWith: arg('--with') !== undefined ? list('--with') : undefined,
+    wireCodegraphFlag: has('--no-codegraph')
+      ? false
+      : has('--codegraph')
+        ? true
+        : undefined,
+    codegraphCandidateKeys,
     interactive: interactiveInit,
   })
   const { target, targets, type } = selection
@@ -262,7 +334,7 @@ async function main(): Promise<void> {
     manifest,
     type,
     adapter,
-    withOptional: list('--with'),
+    withOptional: selection.withOptional,
   })
   if (has('--dry-run')) {
     const plan = installProfilePackages({
@@ -278,7 +350,18 @@ async function main(): Promise<void> {
     })
     console.log(
       JSON.stringify(
-        { targets, type, root, adapter, docsRoot, packageIds, invocations: plan },
+        {
+          targets,
+          type,
+          root,
+          adapter,
+          docsRoot,
+          withOptional: selection.withOptional,
+          wireCodegraph: selection.wireCodegraph,
+          codegraphCandidates: codegraphCandidateKeys,
+          packageIds,
+          invocations: plan,
+        },
         null,
         2,
       ),
@@ -293,13 +376,37 @@ async function main(): Promise<void> {
     repoUrl: arg('--repo-url'),
   })
   for (const file of maps.written) console.log(`  wrote: ${file}`)
+
+  // Cross-repo index routing: wire per-repo CodeGraph MCP servers when the
+  // member opted in. Only the declared machine-local maps are consulted.
+  const wire = selection.wireCodegraph
+    ? wireCodegraph({ root, filterKeys: codegraphFilter })
+    : undefined
+  if (wire) reportCodegraphPlan(wire)
+  else if (codegraphCandidateKeys.length) {
+    console.log(
+      `  codegraph: skipped ${codegraphCandidateKeys.length} repo(s) — run \`platform-dna codegraph:wire\` later`,
+    )
+  }
+  const mcpManifest: InstallManifestMcp | undefined = wire?.manifestMcp
+
+  const gitignoreEntries: OwnedGitignoreEntry[] = [...maps.gitignoreEntries]
+  if (mcpManifest) {
+    // Local MCP config holds absolute machine paths — keep it out of git. It is
+    // shared because other toolkits also wire into the same file.
+    const mcpIgnore = ensureGitignoreEntries(root, [CODEGRAPH_MCP_FILE])
+    if (mcpIgnore.changed) console.log(`  wrote: ${mcpIgnore.file} (${CODEGRAPH_MCP_FILE})`)
+    gitignoreEntries.push({ pattern: CODEGRAPH_MCP_FILE, shared: true })
+  }
+
   const harness = installHarness({
     root,
     type,
     adapter,
     force: has('--force'),
     seededMaps: maps.maps,
-    gitignoreAdded: maps.gitignoreAdded,
+    gitignoreEntries,
+    mcp: mcpManifest,
   })
   for (const file of harness.written) console.log(`  wrote: ${file}`)
   for (const file of harness.unchanged) console.log(`  unchanged: ${file}`)

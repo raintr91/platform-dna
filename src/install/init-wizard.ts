@@ -47,6 +47,10 @@ export interface InitWizardSelection {
   target: string
   type: ProfileType
   adapter?: string
+  /** Optional toolkits the member chose to install now (empty = init "trống"). */
+  withOptional: string[]
+  /** Whether to wire cross-repo CodeGraph MCP servers during this init. */
+  wireCodegraph: boolean
 }
 
 export async function resolveInitWizard(opts: {
@@ -55,6 +59,12 @@ export async function resolveInitWizard(opts: {
   requestedTarget?: string
   requestedType?: string
   requestedAdapter?: string
+  /** Optional toolkits from `--with`; undefined means "not passed" (prompt). */
+  requestedWith?: string[]
+  /** Explicit `--codegraph` / `--no-codegraph`; undefined defers to the wizard. */
+  wireCodegraphFlag?: boolean
+  /** CodeGraph server keys available to wire (derived from machine-local maps). */
+  codegraphCandidateKeys?: string[]
   interactive: boolean
   detectedAgents?: AgentId[]
   prompts?: InitWizardPrompts
@@ -101,10 +111,47 @@ export async function resolveInitWizard(opts: {
     })
   }
 
+  // Optional toolkits: only those with install metadata are offered here; a repo
+  // can init "trống" (choose none) and add them later, or let the toolkit
+  // register itself. CodeGraph is handled by its own wire step, not installed.
+  const installableOptional = profile.optional.filter((id) => opts.manifest.packages[id])
+  const withOptional =
+    opts.interactive && opts.requestedWith === undefined
+      ? installableOptional.length
+        ? await prompts.checkbox({
+            message: 'Optional toolkits to add now (Space toggle · none = skip, add later):',
+            choices: installableOptional.map((id) => ({ value: id, name: id, checked: false })),
+          })
+        : []
+      : (opts.requestedWith ?? [])
+
+  // Cross-repo CodeGraph wiring: only meaningful when Cursor is targeted and the
+  // machine-local maps declare other repos. Members can skip and wire later.
+  const cursorSelected = targets.includes('cursor')
+  const candidates = opts.codegraphCandidateKeys ?? []
+  let wireCodegraph = opts.wireCodegraphFlag ?? cursorSelected
+  if (
+    opts.wireCodegraphFlag === undefined &&
+    opts.interactive &&
+    cursorSelected &&
+    candidates.length
+  ) {
+    const choice = await prompts.select({
+      message: `Wire cross-repo CodeGraph servers for ${candidates.length} repo(s) now?`,
+      choices: [
+        { value: 'yes', name: 'Yes — wire into .cursor/mcp.json now' },
+        { value: 'later', name: 'Skip — run `platform-dna codegraph:wire` later' },
+      ],
+    })
+    wireCodegraph = choice === 'yes'
+  }
+
   return {
     targets,
     target: targets.join(',') || 'none',
     type,
     adapter,
+    withOptional,
+    wireCodegraph: wireCodegraph && cursorSelected,
   }
 }
