@@ -28,6 +28,7 @@ import {
   CONFIGURE_REPO_MAPS_REL,
   isVendorThinConfigureRepoMaps,
 } from './configure-repo-maps.js'
+import { localMapsStatus, type LocalMapStatus } from './local-maps.js'
 
 export interface InstallManifestFile {
   source: string
@@ -78,6 +79,8 @@ export interface HarnessStatus {
   files: HarnessFileStatus[]
   gitignore: GitignoreEntryStatus[]
   mcp: McpServerStatus[]
+  /** Read-only cross-repo map nag slice; empty maps do not fail status. */
+  localMaps: LocalMapStatus[]
 }
 
 export interface PruneHarnessResult {
@@ -375,6 +378,7 @@ export function getHarnessStatus(root: string): HarnessStatus {
       .sort((left, right) => left.path.localeCompare(right.path)),
     gitignore: gitignoreStatus(targetRoot, manifest),
     mcp: mcpStatus(targetRoot, manifest),
+    localMaps: localMapsStatus(targetRoot),
   }
 }
 

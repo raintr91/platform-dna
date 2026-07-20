@@ -1001,6 +1001,34 @@ test('ensureLocalRepoMaps creates skeletons once and preserves member content + 
   )
 })
 
+test('getHarnessStatus reports localMaps without failing when maps are empty', () => {
+  const root = target('docs')
+  seedProjectMaps({ root, type: 'docs' })
+  installHarness({ root, type: 'docs' })
+  const status = getHarnessStatus(root)
+  assert.ok(Array.isArray(status.localMaps))
+  assert.deepEqual(
+    status.localMaps.map((entry) => entry.file).sort(),
+    [LEGACY_LOCAL_MAP, PLATFORM_LOCAL_MAP].sort(),
+  )
+  for (const entry of status.localMaps) {
+    assert.equal(entry.exists, true)
+    assert.equal(entry.empty, true)
+    assert.equal(entry.projectCount, 0)
+  }
+
+  writeFileSync(
+    path.join(root, PLATFORM_LOCAL_MAP),
+    JSON.stringify({ projects: { portal: { root: '/tmp/portal' } } }),
+  )
+  const filled = getHarnessStatus(root)
+  const platform = filled.localMaps.find((entry) => entry.file === PLATFORM_LOCAL_MAP)
+  assert.ok(platform)
+  assert.equal(platform.empty, false)
+  assert.equal(platform.projectCount, 1)
+  assert.equal(filled.localMaps.find((entry) => entry.file === LEGACY_LOCAL_MAP).empty, true)
+})
+
 test('seedProjectMaps upserts current repo only and does not wipe sibling catalog', () => {
   const root = target('docs')
   writeFileSync(
@@ -1150,6 +1178,47 @@ test('readRepoRefs reads both local maps and planCodegraphServers filters + norm
     filtered.wire.map((server) => server.name),
     ['codegraph-portal'],
   )
+})
+
+test('readRepoRefs prefers platform map on same-key collision; legacy-only keys remain', () => {
+  const root = scratch('cg-collision')
+  const platformRoot = scratch('cg-collision-platform')
+  const legacyDupRoot = scratch('cg-collision-legacy-dup')
+  const legacyOnlyRoot = scratch('cg-collision-legacy-only')
+  mkdirSync(path.join(platformRoot, '.codegraph'))
+  mkdirSync(path.join(legacyOnlyRoot, '.codegraph'))
+  writeFileSync(
+    path.join(root, 'platform-repos.local.json'),
+    JSON.stringify({ projects: { portal: { root: platformRoot } } }),
+  )
+  writeFileSync(
+    path.join(root, 'legacy-repos.local.json'),
+    JSON.stringify({
+      projects: {
+        portal: { root: legacyDupRoot },
+        'legacy-erp': { root: legacyOnlyRoot },
+      },
+    }),
+  )
+
+  const refs = readRepoRefs(root)
+  const portal = refs.find((ref) => ref.key === 'portal')
+  assert.ok(portal)
+  assert.equal(portal.root, platformRoot)
+  assert.equal(portal.source, 'platform')
+  const legacyErp = refs.find((ref) => ref.key === 'legacy-erp')
+  assert.ok(legacyErp)
+  assert.equal(legacyErp.root, legacyOnlyRoot)
+  assert.equal(legacyErp.source, 'legacy')
+  assert.equal(refs.length, 2)
+
+  const plan = planCodegraphServers({ root })
+  const wiredPortal = plan.wire.find((server) => server.name === 'codegraph-portal')
+  assert.ok(wiredPortal)
+  assert.equal(wiredPortal.root, path.resolve(platformRoot))
+  assert.equal(wiredPortal.source, 'platform')
+  assert.ok(plan.wire.some((server) => server.name === 'codegraph-legacy-erp'))
+  assert.ok(!plan.wire.some((server) => server.root === path.resolve(legacyDupRoot)))
 })
 
 test('planCodegraphServers excludes the current repo and never wires un-indexed repos', () => {
