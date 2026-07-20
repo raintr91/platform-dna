@@ -64,5 +64,7 @@ Modified stale files remain in place and in the manifest for review.
 The manifest schema, package identity, harness API, source/target mapping, and
 contained paths are validated before status, install, or prune proceeds.
 Project maps, `.gitignore`, specialist toolkit files, and files not recorded by
-Platform DNA are outside prune ownership. Platform DNA owns only
-`platform-repos*.json`; Bundlekit owns `legacy-repos*.json`.
+Platform DNA are outside prune ownership. Portable maps: Platform DNA owns
+`platform-repos*.json`; Bundlekit owns `legacy-repos*.json`. Machine-local
+`*.local.json` skeletons are ensured by any toolkit via `ensureLocalRepoMaps`
+(member-owned content; shared `.gitignore`).

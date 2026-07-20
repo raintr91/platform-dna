@@ -24,6 +24,10 @@ import {
   type OwnedGitignoreEntry,
 } from './gitignore.js'
 import { mcpEntryHash, removeMcpServers } from './mcp-config.js'
+import {
+  CONFIGURE_REPO_MAPS_REL,
+  isVendorThinConfigureRepoMaps,
+} from './configure-repo-maps.js'
 
 export interface InstallManifestFile {
   source: string
@@ -252,10 +256,11 @@ function validCanonicalPattern(pattern: string): boolean {
 }
 
 function validateManifestGitignore(value: Record<string, unknown>): OwnedGitignoreEntry[] {
-  // Back-compat: the boolean form only ever tracked the local project map.
+  // Back-compat: the boolean form only ever tracked the platform local map.
+  // New inits record both local maps as shared via ensureLocalRepoMaps.
   if (value.gitignore === undefined) {
     if (value.gitignoreEntryAdded === true) {
-      return [{ pattern: 'platform-repos.local.json', shared: false }]
+      return [{ pattern: 'platform-repos.local.json', shared: true }]
     }
     if (value.gitignoreEntryAdded !== undefined && typeof value.gitignoreEntryAdded !== 'boolean') {
       throw new Error('Invalid Platform DNA install manifest gitignoreEntryAdded')
@@ -542,7 +547,10 @@ export function installHarness(opts: {
           continue
         }
         const safe = previous?.files[targetRel]?.sha256 === hash(current)
-        if (!opts.force && !safe) {
+        // Thin Bundlekit/Processkit copies of /configure-repo-maps yield to DNA SSOT.
+        const replaceThin =
+          targetRel === CONFIGURE_REPO_MAPS_REL && isVendorThinConfigureRepoMaps(current)
+        if (!opts.force && !safe && !replaceThin) {
           result.conflicts.push(target)
           continue
         }

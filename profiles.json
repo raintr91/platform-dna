@@ -78,8 +78,8 @@
       "bin": "bin/codegenkit.mjs",
       "types": ["fe", "be"],
       "invocations": {
-        "fe": [["init", "--type=fe", "--adapter={adapter}", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
-        "be": [["init", "--type=be", "--adapter={adapter}", "--yes", "--project-root={projectRoot}", "{force}"]]
+        "fe": [["init", "--type=fe", "--adapter={adapter}", "--target={target}", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
+        "be": [["init", "--type=be", "--adapter={adapter}", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
       }
     },
     "testkit": {
@@ -88,8 +88,8 @@
       "bin": "bin/testkit.mjs",
       "types": ["fe", "tests"],
       "invocations": {
-        "fe": [["init", "--type=fe", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
-        "tests": [["init", "--type=tests", "--yes", "--project-root={projectRoot}", "{force}"]]
+        "fe": [["init", "--type=fe", "--target={target}", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
+        "tests": [["init", "--type=tests", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
       }
     },
     "artifactgraph": {

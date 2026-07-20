@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ProfileType } from '../config/project-root.js'
-import { ensureGitignoreEntries, type OwnedGitignoreEntry } from './gitignore.js'
+import type { OwnedGitignoreEntry } from './gitignore.js'
+import {
+  ensureLocalRepoMaps,
+  type EnsureLocalRepoMapsResult,
+} from './local-maps.js'
 
 const PLATFORM_SCHEMA =
   'https://github.com/raintr91/platform-dna/blob/main/templates/schemas/platform-repos.schema.json'
@@ -49,6 +53,8 @@ export function seedProjectMaps(opts: {
   written: string[]
   unchanged: string[]
   maps: SeededProjectMap[]
+  /** Machine-local map ensure (both `.local.json`); shared ignore ownership. */
+  localMaps: EnsureLocalRepoMapsResult
   gitignoreAdded: boolean
   gitignoreEntries: OwnedGitignoreEntry[]
 } {
@@ -83,25 +89,40 @@ export function seedProjectMaps(opts: {
     )
   }
   const currentProject = current?.[1] as Record<string, unknown> | undefined
-  data.groups = {
-    [opts.type]: {
+  // Preserve sibling catalog entries when the map already exists; only upsert
+  // the current-repo (root ".") entry and its group primary.
+  if (!platformExisted) {
+    data.groups = {
+      [opts.type]: {
+        description: `${opts.type.toUpperCase()} current repository`,
+        primary: repoName,
+        projects: [repoName],
+      },
+    }
+    data.projects = {}
+  } else {
+    data.groups = data.groups && typeof data.groups === 'object' ? data.groups : {}
+    data.projects = data.projects && typeof data.projects === 'object' ? data.projects : {}
+    const group = (data.groups[opts.type] ??= {
       description: `${opts.type.toUpperCase()} current repository`,
       primary: repoName,
-      projects: [repoName],
-    },
+      projects: [] as string[],
+    })
+    group.primary = repoName
+    const projects = Array.isArray(group.projects) ? group.projects : []
+    if (!projects.includes(repoName)) projects.push(repoName)
+    group.projects = projects
   }
-  data.projects = {
-    [repoName]: {
-      root: '.',
-      role: opts.type,
-      repo: repoName,
-      ...(opts.repoUrl
-        ? { url: opts.repoUrl }
-        : typeof currentProject?.url === 'string'
-          ? { url: currentProject.url }
-          : {}),
-      write: typeof currentProject?.write === 'boolean' ? currentProject.write : true,
-    },
+  data.projects[repoName] = {
+    root: '.',
+    role: opts.type,
+    repo: repoName,
+    ...(opts.repoUrl
+      ? { url: opts.repoUrl }
+      : typeof currentProject?.url === 'string'
+        ? { url: currentProject.url }
+        : {}),
+    write: typeof currentProject?.write === 'boolean' ? currentProject.write : true,
   }
 
   const written: string[] = []
@@ -109,16 +130,12 @@ export function seedProjectMaps(opts: {
   ;(writeIfChanged(platformFile, data) ? written : unchanged).push(platformFile)
   ;(writeIfChanged(exampleFile, data) ? written : unchanged).push(exampleFile)
 
-  // The machine-local map is the only ignore entry Platform DNA exclusively
-  // owns from seeding; it must never be committed (holds member checkout roots).
-  const gitignoreResult = ensureGitignoreEntries(root, ['platform-repos.local.json'])
-  ;(gitignoreResult.changed ? written : unchanged).push(gitignoreResult.file)
-  // Only claim ownership of entries this run actually added, so deinit never
-  // strips a line the member wrote themselves.
-  const gitignoreEntries: OwnedGitignoreEntry[] = gitignoreResult.added.map((pattern) => ({
-    pattern,
-    shared: false,
-  }))
+  // Machine-local maps: create-if-missing only (never seed portable legacy-repos*).
+  const localMaps = ensureLocalRepoMaps(root)
+  for (const file of localMaps.created) written.push(path.join(root, file))
+  for (const file of localMaps.skipped) unchanged.push(path.join(root, file))
+  if (localMaps.gitignoreAdded.length) written.push(path.join(root, '.gitignore'))
+  else unchanged.push(path.join(root, '.gitignore'))
 
   return {
     written,
@@ -135,7 +152,8 @@ export function seedProjectMaps(opts: {
         created: !exampleExisted,
       },
     ],
-    gitignoreAdded: gitignoreResult.changed,
-    gitignoreEntries,
+    localMaps,
+    gitignoreAdded: localMaps.gitignoreAdded.length > 0,
+    gitignoreEntries: localMaps.gitignoreEntries,
   }
 }

@@ -42,6 +42,11 @@ import {
 } from '../dist/install/codegraph.js'
 import { assertPortableMap, seedProjectMaps } from '../dist/install/maps.js'
 import {
+  ensureLocalRepoMaps,
+  LEGACY_LOCAL_MAP,
+  PLATFORM_LOCAL_MAP,
+} from '../dist/install/local-maps.js'
+import {
   installProfilePackages,
   resolvePackageSet,
 } from '../dist/install/packages.js'
@@ -326,6 +331,11 @@ for (const [type, adapter] of [
     assert.equal(map.projects[`${type}-base`].role, type)
     assert.equal(map.harness, undefined)
     assert.equal(existsSync(path.join(root, 'legacy-repos.json')), false)
+    assert.equal(existsSync(path.join(root, PLATFORM_LOCAL_MAP)), true)
+    assert.equal(existsSync(path.join(root, LEGACY_LOCAL_MAP)), true)
+    const ignore = readFileSync(path.join(root, '.gitignore'), 'utf8')
+    assert.match(ignore, /platform-repos\.local\.json/)
+    assert.match(ignore, /legacy-repos\.local\.json/)
   })
 }
 
@@ -766,7 +776,9 @@ test('deinit removes only manifest-owned unchanged maps and preserves modified m
   assert.equal(existsSync(exampleMap), false)
   assert.equal(existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')), false)
   assert.equal(existsSync(path.join(root, '.platform-dna/install-manifest.json')), false)
-  assert.doesNotMatch(readFileSync(path.join(root, '.gitignore'), 'utf8'), /platform-repos\.local/)
+  // Local-map ignore lines are shared — kept so other toolkits can still use maps.
+  assert.match(readFileSync(path.join(root, '.gitignore'), 'utf8'), /platform-repos\.local/)
+  assert.match(readFileSync(path.join(root, '.gitignore'), 'utf8'), /legacy-repos\.local/)
 })
 
 test('deinit preserves a project map that predated Platform DNA ownership', () => {
@@ -786,6 +798,21 @@ test('deinit preserves a project map that predated Platform DNA ownership', () =
 
   uninstallHarness({ root, yes: true })
   assert.ok(existsSync(path.join(root, 'platform-repos.json')))
+})
+
+test('DNA replaces thin /configure-repo-maps copies without --force', () => {
+  const root = target('docs')
+  const skill = path.join(root, '.cursor/skills/configure-repo-maps/SKILL.md')
+  mkdirSync(path.dirname(skill), { recursive: true })
+  writeFileSync(
+    skill,
+    '---\nname: configure-repo-maps\n---\n\n<!-- toolkit:configure-repo-maps-thin -->\n\n# thin vendor copy\n',
+  )
+  const result = installHarness({ root, type: 'docs' })
+  assert.equal(result.conflicts.length, 0, result.conflicts.join('\n'))
+  const body = readFileSync(skill, 'utf8')
+  assert.match(body, /platform-dna:configure-repo-maps-ssot/)
+  assert.doesNotMatch(body, /toolkit:configure-repo-maps-thin/)
 })
 
 test('CLI contract: deinit is local and uninstall is global dry-run by default', () => {
@@ -931,19 +958,108 @@ test('two toolkits needing .cursor/ do not duplicate the entry', () => {
 
 test('deinit removes exclusive ignore entries but keeps shared ones', () => {
   const root = target('docs')
-  ensureGitignoreEntries(root, ['platform-repos.local.json', '.cursor/mcp.json'])
+  ensureGitignoreEntries(root, ['.platform-dna/', '.cursor/mcp.json'])
   installHarness({
     root,
     type: 'docs',
     gitignoreEntries: [
-      { pattern: 'platform-repos.local.json', shared: false },
+      { pattern: '.platform-dna/', shared: false },
       { pattern: '.cursor/mcp.json', shared: true },
     ],
   })
   uninstallHarness({ root, yes: true })
   const body = readFileSync(path.join(root, '.gitignore'), 'utf8')
-  assert.doesNotMatch(body, /platform-repos\.local\.json/)
+  assert.doesNotMatch(body, /\.platform-dna\//)
   assert.match(body, /\.cursor\/mcp\.json/)
+})
+
+test('ensureLocalRepoMaps creates skeletons once and preserves member content + CRLF', () => {
+  const root = scratch('local-maps')
+  const first = ensureLocalRepoMaps(root)
+  assert.deepEqual(first.created.sort(), [LEGACY_LOCAL_MAP, PLATFORM_LOCAL_MAP].sort())
+  assert.deepEqual(first.skipped, [])
+  const platformBody = readFileSync(path.join(root, PLATFORM_LOCAL_MAP), 'utf8')
+  assert.match(platformBody, /"projects": \{\}/)
+  assert.equal(existsSync(path.join(root, LEGACY_LOCAL_MAP)), true)
+
+  const member = '{\r\n  "projects": {\r\n    "portal": { "root": "/tmp/portal" }\r\n  }\r\n}\r\n'
+  writeFileSync(path.join(root, PLATFORM_LOCAL_MAP), member)
+  const second = ensureLocalRepoMaps(root)
+  assert.deepEqual(second.created, [])
+  assert.deepEqual(second.skipped.sort(), [LEGACY_LOCAL_MAP, PLATFORM_LOCAL_MAP].sort())
+  assert.equal(readFileSync(path.join(root, PLATFORM_LOCAL_MAP), 'utf8'), member)
+
+  const ignore = readFileSync(path.join(root, '.gitignore'), 'utf8')
+  assert.match(ignore, /platform-repos\.local\.json/)
+  assert.match(ignore, /legacy-repos\.local\.json/)
+  assert.deepEqual(
+    second.gitignoreEntries.map((e) => [e.pattern, e.shared]),
+    [
+      [PLATFORM_LOCAL_MAP, true],
+      [LEGACY_LOCAL_MAP, true],
+    ],
+  )
+})
+
+test('seedProjectMaps upserts current repo only and does not wipe sibling catalog', () => {
+  const root = target('docs')
+  writeFileSync(
+    path.join(root, 'platform-repos.json'),
+    JSON.stringify({
+      defaultGroup: 'docs',
+      groups: {
+        docs: { primary: 'other-docs', projects: ['other-docs'] },
+        fe: { primary: 'portal', projects: ['portal'] },
+      },
+      projects: {
+        'other-docs': { root: '.', role: 'docs', repo: 'other-docs', write: true },
+        portal: {
+          role: 'fe',
+          repo: 'portal',
+          write: false,
+          url: 'https://example.com/portal.git',
+        },
+      },
+    }),
+  )
+  assert.throws(
+    () => seedProjectMaps({ root, type: 'docs', repoName: 'docs' }),
+    /already maps root "\." as other-docs/,
+  )
+
+  const root2 = target('fe', 'nuxt4')
+  writeFileSync(
+    path.join(root2, 'platform-repos.json'),
+    JSON.stringify({
+      defaultGroup: 'fe',
+      groups: {
+        fe: { primary: 'portal', projects: ['portal'] },
+        be: { primary: 'api', projects: ['api'] },
+      },
+      projects: {
+        portal: {
+          root: '.',
+          role: 'fe',
+          repo: 'portal',
+          write: true,
+          url: 'https://example.com/portal.git',
+        },
+        api: {
+          role: 'be',
+          repo: 'api',
+          write: false,
+          url: 'https://example.com/api.git',
+        },
+      },
+    }),
+  )
+  seedProjectMaps({ root: root2, type: 'fe', repoName: 'portal' })
+  const map = JSON.parse(readFileSync(path.join(root2, 'platform-repos.json'), 'utf8'))
+  assert.deepEqual(Object.keys(map.projects).sort(), ['api', 'portal'])
+  assert.equal(map.projects.api.url, 'https://example.com/api.git')
+  assert.equal(map.projects.portal.url, 'https://example.com/portal.git')
+  assert.equal(map.projects.portal.root, '.')
+  assert.equal(map.groups.be.primary, 'api')
 })
 
 test('mergeMcpServers preserves member entries and is idempotent', () => {

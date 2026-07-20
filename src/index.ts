@@ -20,6 +20,20 @@ export type {
 export { assertPortableMap, seedProjectMaps } from './install/maps.js'
 export type { SeededProjectMap } from './install/maps.js'
 export {
+  ensureLocalRepoMaps,
+  localMapFileForSystemId,
+  localMapsStatus,
+  mapKindForSystemId,
+  LEGACY_LOCAL_MAP,
+  LOCAL_MAP_FILES,
+  PLATFORM_LOCAL_MAP,
+} from './install/local-maps.js'
+export type {
+  EnsureLocalRepoMapsResult,
+  LocalMapStatus,
+  RepoMapKind,
+} from './install/local-maps.js'
+export {
   discoverInstalls,
   forgetInstall,
   ledgerPath,

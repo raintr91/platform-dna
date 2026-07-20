@@ -9,6 +9,10 @@ Do not merge every repository into a single workspace graph (the parent folder
 must never be indexed). "Cross-repo" means a skill/rule knows how to reach the
 **correct per-repo index**, one repository at a time.
 
+**Owner:** Platform DNA. Processkit (and other toolkits) install this same
+filename only when DNA is absent, so a destination never carries duplicate
+`alwaysApply` routing rules under different names.
+
 Route by intent:
 
 - Need an architecture ID or C4 path -> Hubdocs MCP (`HUBDOCS_ROOT`). Never
@@ -19,6 +23,13 @@ Route by intent:
   `X` (`codegraph-<key>`, whose `--project-root` is `X`'s checkout). Do not use
   the index of the repository currently open.
 
+Checkout maps (machine-local only):
+
+| System id / intent | Map |
+|--------------------|-----|
+| Prefix `legacy-` or clear legacy archaeology | `legacy-repos.local.json` |
+| Platform skills / step `[system]` without `legacy-` | `platform-repos.local.json` |
+
 Rules:
 
 - One `.codegraph/` per repository, created locally with `codegraph init` inside
@@ -27,7 +38,10 @@ Rules:
   `cd <root> && codegraph init` first.
 - ArtifactGraph stays local-only; it is never a shared index for FE, tests, or
   legacy repositories.
-
-Platform DNA wires the `codegraph-<key>` servers into this repo's local
-`.cursor/mcp.json` from the machine-local maps (`platform-repos.local.json`,
-`legacy-repos.local.json`). Re-run `platform-dna codegraph:wire` to refresh.
+- Ambiguous keys → ask or Gaps; never invent sibling paths.
+- Missing / empty `.local.json` or missing key → Gaps + `/configure-repo-maps`
+  (NL); do not hand-edit JSON or guess absolute paths.
+- Platform DNA wires `codegraph-<key>` from both machine-local maps. Re-run
+  `platform-dna codegraph:wire` to refresh; never commit machine paths. Key
+  collision: **platform map wins**; prefer `legacy-*` keys for legacy-only
+  checkouts.

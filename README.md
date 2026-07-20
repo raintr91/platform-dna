@@ -31,12 +31,50 @@ each toolkit's own `init`. Use `--no-install` to require preinstalled tools or
 
 Ownership:
 
-- Platform DNA: repo-only `platform-repos` schema/seeding, profile manifest, and
-  FE `/platform-base` for the Nuxt/Next adapters.
+- Platform DNA: portable `platform-repos*` schema/seeding, profile manifest, FE
+  `/platform-base` (Nuxt/Next), and SSOT `/configure-repo-maps` plus
+  `ensureLocalRepoMaps` for both machine-local maps.
+- Bundlekit: portable `legacy-repos*`.
 - Specialist toolkits: all architecture/spec/process/code/test skills and MCP
-  tools.
+  tools. Any toolkit `init` may ensure `*.local.json` skeletons (create-if-missing).
 - Each toolkit source keeps its own local `/platform-ai` for improving that
   toolkit; Platform DNA never syncs `/platform-ai` into destination repos.
+
+Maps (see [docs/PROJECT-MAPS.md](./docs/PROJECT-MAPS.md)):
+
+- Portable: DNA = `platform-repos*`; Bundlekit = `legacy-repos*`.
+- Machine-local: both `platform-repos.local.json` and `legacy-repos.local.json`
+  — ensured on init, member fills roots via `/configure-repo-maps` (NL).
+- Routing: platform skills → platform local map; `legacy-*` → legacy local map.
+
+### `/configure-repo-maps` — example prompts
+
+Do not hand-edit JSON. After `platform-dna init`, open the skill and paste a
+topology description:
+
+```text
+/configure-repo-maps
+
+docs = base-docs ở ~/ws/base-docs, portal admin ở ~/ws/portal, api core ở ~/ws/api
+```
+
+```text
+/configure-repo-maps
+
+2 portal: admin ở ~/ws/portal, line ở ~/ws/line; 2 API: core ở ~/ws/api-core,
+scenario ở ~/ws/api-scenario; docs = ~/ws/base-docs; tests = ~/ws/base-tests
+```
+
+```text
+/configure-repo-maps
+
+legacy ERP ở D:\legacy\erp, key legacy-erp
+```
+
+Expected: merge-by-key into `platform-repos.local.json` and/or
+`legacy-repos.local.json` (never absolute paths in portable `platform-repos.json`).
+Then run `platform-dna codegraph:wire`; for each checkout missing `.codegraph/`:
+`cd <root> && codegraph init`. More detail in [docs/PROJECT-MAPS.md](./docs/PROJECT-MAPS.md).
 
 Safety:
 
@@ -44,7 +82,8 @@ Safety:
 - A declared or detected lane mismatch fails unless `--force` is explicit.
 - Targets with `mcp-package.json` or `role=tooling` are rejected (DNA is not for MCP repos).
 - Committed project maps containing sibling or machine paths are rejected.
-- `platform-repos.local.json` remains member-owned and is added to `.gitignore`.
+- Both `*.local.json` maps remain member-owned and are added to `.gitignore`
+  (shared entries — deinit keeps them for other toolkits).
 - `--dry-run` prints package invocations without writing or cloning.
 - `.platform-dna/install-manifest.json` tracks active and stale Platform-DNA-owned
   harness files plus hashes for maps that Platform DNA itself seeded. Switching

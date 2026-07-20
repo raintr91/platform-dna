@@ -85,7 +85,9 @@ function extractProjects(data: unknown): Record<string, unknown> {
 
 export function readRepoRefs(root: string): RepoRef[] {
   const base = path.resolve(root)
-  const refs: RepoRef[] = []
+  // Platform map is listed first so duplicate keys prefer platform (legacy-only
+  // keys typically use the `legacy-*` prefix and appear only in the legacy map).
+  const byKey = new Map<string, RepoRef>()
   for (const { file, source } of LOCAL_MAPS) {
     const mapPath = path.join(base, file)
     if (!existsSync(mapPath)) continue
@@ -96,13 +98,14 @@ export function readRepoRefs(root: string): RepoRef[] {
       continue
     }
     for (const [key, value] of Object.entries(extractProjects(data))) {
+      if (byKey.has(key)) continue
       const rootValue = (value as { root?: unknown } | null)?.root
       if (typeof rootValue === 'string' && rootValue.trim()) {
-        refs.push({ key, root: rootValue.trim(), source })
+        byKey.set(key, { key, root: rootValue.trim(), source })
       }
     }
   }
-  return refs
+  return [...byKey.values()]
 }
 
 export function codegraphCommand(): string {
