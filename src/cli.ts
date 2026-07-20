@@ -106,7 +106,7 @@ function lexists(file: string): boolean {
 function cliTargets(): string[] {
   const installDir = path.resolve(
     process.env.PLATFORM_DNA_INSTALL_DIR ??
-      path.join(os.homedir(), '.platform-dna', 'bootstrap'),
+    path.join(os.homedir(), '.platform-dna', 'bootstrap'),
   )
   const binDir = path.resolve(
     process.env.PLATFORM_DNA_BIN_DIR ?? path.join(os.homedir(), '.local', 'bin'),
@@ -286,8 +286,8 @@ async function main(): Promise<void> {
   const codegraphCandidateKeys =
     command === 'init'
       ? wireCodegraph({ root, filterKeys: codegraphFilter, dryRun: true }).plan.wire.map(
-          (server) => server.key,
-        )
+        (server) => server.key,
+      )
       : []
   const selection = await resolveInitWizard({
     root,

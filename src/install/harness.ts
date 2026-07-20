@@ -322,8 +322,7 @@ export function readInstallManifest(root: string): InstallManifest | undefined {
     parsed = JSON.parse(readFileSync(file, 'utf8'))
   } catch (error) {
     throw new Error(
-      `Invalid Platform DNA install manifest JSON: ${
-        error instanceof Error ? error.message : String(error)
+      `Invalid Platform DNA install manifest JSON: ${error instanceof Error ? error.message : String(error)
       }`,
     )
   }
@@ -574,10 +573,10 @@ export function installHarness(opts: {
     files,
     maps: opts.seededMaps
       ? Object.fromEntries(
-          opts.seededMaps
-            .filter((map) => map.created || previous?.maps?.[map.path])
-            .map((map) => [map.path, { sha256: map.sha256 }]),
-        )
+        opts.seededMaps
+          .filter((map) => map.created || previous?.maps?.[map.path])
+          .map((map) => [map.path, { sha256: map.sha256 }]),
+      )
       : previous?.maps,
   }
   const gitignore = mergeGitignore(previous?.gitignore, opts.gitignoreEntries)
@@ -677,12 +676,12 @@ export function uninstallHarness(opts: {
       const present =
         existsSync(file) && lstatSync(file).isFile()
           ? new Set(
-              readFileSync(file, 'utf8')
-                .split(/\r?\n/)
-                .map((line) => line.trim())
-                .filter((line) => line && !line.startsWith('#'))
-                .map(canonicalGitignorePattern),
-            )
+            readFileSync(file, 'utf8')
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter((line) => line && !line.startsWith('#'))
+              .map(canonicalGitignorePattern),
+          )
           : new Set<string>()
       for (const pattern of exclusiveIgnore) {
         if (present.has(canonicalGitignorePattern(pattern))) {
@@ -704,7 +703,7 @@ export function uninstallHarness(opts: {
     )
     const mcpResult = removeMcpServers(file, expected, { dryRun })
     for (const name of mcpResult.removed) {
-      ;(dryRun ? result.wouldDelete : result.deleted).push(`${file} server: ${name}`)
+      ; (dryRun ? result.wouldDelete : result.deleted).push(`${file} server: ${name}`)
     }
     for (const name of mcpResult.preservedModified) {
       result.preservedModified.push(`${file} server: ${name}`)
