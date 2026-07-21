@@ -16,7 +16,7 @@ itself. Do not run Platform DNA against toolkit source checkouts.
   SSOT `ensureLocalRepoMaps`, and `/configure-repo-maps`.
 - Reject MCP targets (`mcp-package.json` or `role=tooling`).
 - Never sync `/platform-ai` or lane/meta rules into destination repos.
-- Bundlekit owns portable `legacy-repos*`; DNA only ensures
+- Docskit owns portable `legacy-repos*`; DNA only ensures
   `legacy-repos.local.json` (create-if-missing) via `ensureLocalRepoMaps`.
 - Do not keep a repository-local `platform-repos.json` or sibling topology.
 
