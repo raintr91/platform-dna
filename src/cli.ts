@@ -17,10 +17,7 @@ import {
   uninstallHarness,
 } from './install/harness.js'
 import { assertPortableMap, seedProjectMaps } from './install/maps.js'
-import {
-  installProfilePackages,
-  resolvePackageSet,
-} from './install/packages.js'
+
 import { selectPrompt } from './install/prompt.js'
 import { resolveInitWizard } from './install/init-wizard.js'
 import {
@@ -51,31 +48,16 @@ function list(name: string): string[] {
     .filter(Boolean)
 }
 
-function packageRoots(): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (let index = 0; index < process.argv.length; index += 1) {
-    const current = process.argv[index]
-    const value = current.startsWith('--package-root=')
-      ? current.slice('--package-root='.length)
-      : current === '--package-root'
-        ? process.argv[index + 1]
-        : undefined
-    if (!value) continue
-    const split = value.indexOf('=')
-    if (split <= 0) throw new Error('--package-root must be packageId=/absolute/path')
-    result[value.slice(0, split)] = path.resolve(value.slice(split + 1))
-  }
-  return result
-}
+
 
 function usage(): never {
   console.log(`platform-dna ${packageVersion()}
 
   init [--target=agent,…|auto|all|none] [--type=docs|fe|be|tests] [--adapter=…]
-       [--with=toolkit,…] [--codegraph | --no-codegraph] [--codegraph-repos=key,…]
+       [--codegraph | --no-codegraph] [--codegraph-repos=key,…]
        [--project-root <path>] [--docs-root <path>]
        [--repo-name <id>] [--repo-url <url>]
-       [--package-root packageId=/path] [--no-install] [--force] [--dry-run] [--yes]
+       [--force] [--dry-run] [--yes]
   validate --type=… [--adapter=…] [--project-root <path>]
   status [--project-root <path>]
   prune [--project-root <path>] [--yes] [--dry-run]
@@ -295,7 +277,7 @@ async function main(): Promise<void> {
     requestedTarget: arg('--target'),
     requestedType: arg('--type'),
     requestedAdapter: arg('--adapter'),
-    requestedWith: arg('--with') !== undefined ? list('--with') : undefined,
+
     wireCodegraphFlag: has('--no-codegraph')
       ? false
       : has('--codegraph')
@@ -330,24 +312,7 @@ async function main(): Promise<void> {
   }
   if (command !== 'init') usage()
 
-  const packageIds = resolvePackageSet({
-    manifest,
-    type,
-    adapter,
-    withOptional: selection.withOptional,
-  })
   if (has('--dry-run')) {
-    const plan = installProfilePackages({
-      manifest,
-      type,
-      packageIds,
-      projectRoot: root,
-      target,
-      adapter,
-      docsRoot,
-      force: has('--force'),
-      dryRun: true,
-    })
     console.log(
       JSON.stringify(
         {
@@ -356,11 +321,8 @@ async function main(): Promise<void> {
           root,
           adapter,
           docsRoot,
-          withOptional: selection.withOptional,
           wireCodegraph: selection.wireCodegraph,
           codegraphCandidates: codegraphCandidateKeys,
-          packageIds,
-          invocations: plan,
         },
         null,
         2,
@@ -415,22 +377,7 @@ async function main(): Promise<void> {
     throw new Error('Platform DNA harness conflicts; review files or rerun with explicit --force')
   }
 
-  const plan = installProfilePackages({
-    manifest,
-    type,
-    packageIds,
-    projectRoot: root,
-    target,
-    adapter,
-    docsRoot,
-    force: has('--force'),
-    installMissing: !has('--no-install'),
-    packageRoots: packageRoots(),
-  })
-  for (const step of plan) {
-    console.log(`  ${step.packageId}: ${step.argv.join(' ')}`)
-  }
-  console.log(`platform-dna init complete: ${type} (${packageIds.join(', ') || 'meta only'})`)
+  console.log(`platform-dna init complete: ${type}`)
 }
 
 main().catch((error) => {

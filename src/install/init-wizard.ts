@@ -47,8 +47,7 @@ export interface InitWizardSelection {
   target: string
   type: ProfileType
   adapter?: string
-  /** Optional toolkits the member chose to install now (empty = init "trống"). */
-  withOptional: string[]
+
   /** Whether to wire cross-repo CodeGraph MCP servers during this init. */
   wireCodegraph: boolean
 }
@@ -59,8 +58,7 @@ export async function resolveInitWizard(opts: {
   requestedTarget?: string
   requestedType?: string
   requestedAdapter?: string
-  /** Optional toolkits from `--with`; undefined means "not passed" (prompt). */
-  requestedWith?: string[]
+
   /** Explicit `--codegraph` / `--no-codegraph`; undefined defers to the wizard. */
   wireCodegraphFlag?: boolean
   /** CodeGraph server keys available to wire (derived from machine-local maps). */
@@ -111,19 +109,7 @@ export async function resolveInitWizard(opts: {
     })
   }
 
-  // Optional toolkits: only those with install metadata are offered here; a repo
-  // can init "trống" (choose none) and add them later, or let the toolkit
-  // register itself. CodeGraph is handled by its own wire step, not installed.
-  const installableOptional = profile.optional.filter((id) => opts.manifest.packages[id])
-  const withOptional =
-    opts.interactive && opts.requestedWith === undefined
-      ? installableOptional.length
-        ? await prompts.checkbox({
-            message: 'Optional toolkits to add now (Space toggle · none = skip, add later):',
-            choices: installableOptional.map((id) => ({ value: id, name: id, checked: false })),
-          })
-        : []
-      : (opts.requestedWith ?? [])
+
 
   // Cross-repo CodeGraph wiring: only meaningful when Cursor is targeted and the
   // machine-local maps declare other repos. Members can skip and wire later.
@@ -151,7 +137,7 @@ export async function resolveInitWizard(opts: {
     target: targets.join(',') || 'none',
     type,
     adapter,
-    withOptional,
+
     wireCodegraph: wireCodegraph && cursorSelected,
   }
 }

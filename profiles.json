@@ -2,98 +2,21 @@
   "schemaVersion": 1,
   "profiles": {
     "docs": {
-      "recommended": ["docskit", "processkit"],
-      "optional": ["artifactgraph", "codegraph"],
       "repoMarkers": ["architecture", "product"]
     },
     "fe": {
-      "recommended": ["codegenkit", "testkit", "processkit"],
-      "optional": ["artifactgraph", "codegraph", "docskit"],
       "requiresAdapter": true,
       "adapters": ["nuxt4", "nextjs", "dotnet-line"],
       "repoMarkers": ["package.json", "*.sln"],
       "ownedSkills": ["platform-base"]
     },
     "be": {
-      "recommended": ["codegenkit", "processkit"],
-      "optional": ["artifactgraph", "codegraph", "docskit"],
       "requiresAdapter": true,
       "adapters": ["fastapi", "laravel", "dotnet-integration"],
       "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json", "*.sln"]
     },
     "tests": {
-      "recommended": ["testkit"],
-      "optional": ["artifactgraph"],
       "repoMarkers": ["cases", "tests", "package.json"]
-    }
-  },
-  "packages": {
-    "docskit": {
-      "repository": "https://github.com/raintr91/docskit.git",
-      "command": "docskit",
-      "bin": "bin/docskit.mjs",
-      "types": ["docs", "fe", "be", "tests"],
-      "invocations": {
-        "docs": [
-          ["init", "--target={target}", "--location=local", "--yes", "--docs-root={projectRoot}"],
-          ["harness", "install", "--type=docs", "--project-root={projectRoot}", "{force}"]
-        ],
-        "fe": [
-          ["init", "--target={target}", "--location=local", "--yes", "{docsRootArg}"],
-          ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
-        ],
-        "be": [
-          ["init", "--target={target}", "--location=local", "--yes", "{docsRootArg}"],
-          ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
-        ],
-        "tests": [
-          ["init", "--target={target}", "--location=local", "--yes", "{docsRootArg}"],
-          ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
-        ]
-      }
-    },
-    "processkit": {
-      "repository": "https://github.com/raintr91/Processkit.git",
-      "command": "processkit",
-      "bin": "bin/processkit.mjs",
-      "types": ["docs", "fe", "be"],
-      "invocations": {
-        "docs": [["init", "--type=docs", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]],
-        "fe": [["init", "--type=fe", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]],
-        "be": [["init", "--type=be", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
-      }
-    },
-    "codegenkit": {
-      "repository": "https://github.com/raintr91/codegenkit.git",
-      "command": "codegenkit",
-      "bin": "bin/codegenkit.mjs",
-      "types": ["fe", "be"],
-      "invocations": {
-        "fe": [["init", "--type=fe", "--adapter={adapter}", "--target={target}", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
-        "be": [["init", "--type=be", "--adapter={adapter}", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
-      }
-    },
-    "testkit": {
-      "repository": "https://github.com/raintr91/Testkit.git",
-      "command": "testkit",
-      "bin": "bin/testkit.mjs",
-      "types": ["fe", "tests"],
-      "invocations": {
-        "fe": [["init", "--type=fe", "--target={target}", "--yes", "--project-root={projectRoot}", "{docsRootArg}", "{force}"]],
-        "tests": [["init", "--type=tests", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
-      }
-    },
-    "artifactgraph": {
-      "repository": "https://github.com/raintr91/artifactgraph.git",
-      "command": "artifactgraph",
-      "bin": "bin/artifactgraph.mjs",
-      "types": ["docs", "fe", "be", "tests"],
-      "invocations": {
-        "docs": [["init", "--type=common,docs", "--target={target}", "--location=local", "--yes"]],
-        "fe": [["init", "--type=common,fe", "--target={target}", "--location=local", "--yes"]],
-        "be": [["init", "--type=common,be", "--target={target}", "--location=local", "--yes"]],
-        "tests": [["init", "--type=common,test", "--target={target}", "--location=local", "--yes"]]
-      }
     }
   }
 }
