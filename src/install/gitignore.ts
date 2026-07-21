@@ -7,7 +7,7 @@ import path from 'node:path'
  * Destination repos never hand-maintain toolkit ignore blocks. Each toolkit
  * merges only the entries its own init actually generated, using the helpers
  * here so the semantics (idempotent, EOL-preserving, equivalence-aware) stay
- * identical across Hubdocs, Testkit, ArtifactGraph, Bundlekit, Processkit and
+ * identical across Docskit, Testkit, ArtifactGraph, Processkit and
  * Codegenkit.
  */
 

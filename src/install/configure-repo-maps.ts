@@ -1,7 +1,7 @@
 /**
  * Shared path + markers for `/configure-repo-maps` across toolkits.
  *
- * Platform DNA owns the SSOT skill. Bundlekit / Processkit ship thin copies for
+ * Platform DNA owns the SSOT skill. Docskit / Processkit ship thin copies for
  * install-order independence. Harness install must not leave DNA `init` aborted
  * when a thin copy is already present, and must not overwrite DNA SSOT with a
  * thin copy when DNA ran first.

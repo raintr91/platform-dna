@@ -34,7 +34,7 @@ Ownership:
 - Platform DNA: portable `platform-repos*` schema/seeding, profile manifest, FE
   `/platform-base` (Nuxt/Next), and SSOT `/configure-repo-maps` plus
   `ensureLocalRepoMaps` for both machine-local maps.
-- Bundlekit: portable `legacy-repos*`.
+- Docskit: portable `legacy-repos*`.
 - Specialist toolkits: all architecture/spec/process/code/test skills and MCP
   tools. Any toolkit `init` may ensure `*.local.json` skeletons (create-if-missing).
 - Each toolkit source keeps its own local `/platform-ai` for improving that
@@ -42,7 +42,7 @@ Ownership:
 
 Maps (see [docs/PROJECT-MAPS.md](./docs/PROJECT-MAPS.md)):
 
-- Portable: DNA = `platform-repos*`; Bundlekit = `legacy-repos*`.
+- Portable: DNA = `platform-repos*`; Docskit = `legacy-repos*`.
 - Machine-local: both `platform-repos.local.json` and `legacy-repos.local.json`
   — ensured on init, member fills roots via `/configure-repo-maps` (NL).
 - Routing: platform skills → platform local map; `legacy-*` → legacy local map.

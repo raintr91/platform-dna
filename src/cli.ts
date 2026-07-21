@@ -88,7 +88,7 @@ function usage(): never {
 
 Platform DNA installs only into docs/code hubs (docs · fe · be · tests).
 Run "platform-dna init" in a terminal to select agents, a lane, and an adapter.
-Never init into MCP tooling repos (hubdocs, bundlekit, …).
+Never init into MCP tooling repos (docskit, processkit, …).
 Specialist skills/tools remain owned by their package.
 `)
   process.exit(1)

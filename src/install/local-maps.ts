@@ -5,7 +5,7 @@ import { ensureGitignoreEntries, type OwnedGitignoreEntry } from './gitignore.js
 /**
  * Machine-local checkout maps (create-if-missing only).
  *
- * SSOT for every toolkit `init`: Bundlekit / Processkit / Hubdocs… import this
+ * SSOT for every toolkit `init`: Docskit / Processkit… import this
  * helper so install order never gates cross-repo maps. Never seeds portable
  * `platform-repos.json` / `legacy-repos.json`.
  */
@@ -18,7 +18,7 @@ export const LOCAL_MAP_FILES = [PLATFORM_LOCAL_MAP, LEGACY_LOCAL_MAP] as const
 const PLATFORM_SCHEMA =
   'https://github.com/raintr91/platform-dna/blob/main/templates/schemas/platform-repos.schema.json'
 const LEGACY_SCHEMA =
-  'https://github.com/raintr91/bundlekit/blob/main/templates/schemas/legacy-repos.schema.json'
+  'https://github.com/raintr91/docskit/blob/main/templates/schemas/legacy-repos.schema.json'
 
 export type RepoMapKind = 'platform' | 'legacy'
 

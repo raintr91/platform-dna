@@ -12,7 +12,7 @@ disable-model-invocation: true
 
 # /configure-repo-maps
 
-**Owner:** Platform DNA (SSOT). Bundlekit / Processkit may ship a thin redirect
+**Owner:** Platform DNA (SSOT). Docskit / Processkit may ship a thin redirect
 or copy of this skill for install-order independence — keep semantics identical.
 
 Member describes checkout topology in natural language. You analyze, ask when
@@ -33,7 +33,7 @@ paths.
 | Intent / key | Machine-local file | Portable (optional) |
 |--------------|--------------------|---------------------|
 | Platform checkout (portal, api, docs, tests, …) | `platform-repos.local.json` | Update current-repo entry in `platform-repos.json` only if needed (`root: "."`, no absolute paths) — DNA `seedProjectMaps` rules |
-| `legacy-*` / clear legacy archaeology | `legacy-repos.local.json` | Optional key/`url` (+ `root: "."`) in Bundlekit `legacy-repos.json` — **never** absolute machine roots in portable maps |
+| `legacy-*` / clear legacy archaeology | `legacy-repos.local.json` | Optional key/`url` (+ `root: "."`) in Docskit `legacy-repos.json` — **never** absolute machine roots in portable maps |
 
 ## Procedure
 
@@ -74,7 +74,7 @@ paths.
 ```
 
 Minimal required field per project: `root`. Prefer stable keys matching how
-Processkit / Bundlekit skills refer to systems (`portal`, `api`, `legacy-erp`).
+Processkit / Docskit skills refer to systems (`portal`, `api`, `legacy-erp`).
 
 ## Key collisions (codegraph:wire)
 

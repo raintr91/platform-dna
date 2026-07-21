@@ -550,7 +550,7 @@ export function installHarness(opts: {
           continue
         }
         const safe = previous?.files[targetRel]?.sha256 === hash(current)
-        // Thin Bundlekit/Processkit copies of /configure-repo-maps yield to DNA SSOT.
+        // Thin Docskit/Processkit copies of /configure-repo-maps yield to DNA SSOT.
         const replaceThin =
           targetRel === CONFIGURE_REPO_MAPS_REL && isVendorThinConfigureRepoMaps(current)
         if (!opts.force && !safe && !replaceThin) {

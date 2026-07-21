@@ -5,14 +5,14 @@
 | File | Owner | Purpose |
 |------|-------|---------|
 | `platform-repos.json` · `platform-repos.example.json` | **Platform DNA** | Portable catalog for the current repo (`root: "."` only) |
-| `legacy-repos.json` · `legacy-repos.example.json` | **Bundlekit** | Portable legacy evidence catalog (`url` + optional `root: "."`) |
+| `legacy-repos.json` · `legacy-repos.example.json` | **Docskit** | Portable legacy evidence catalog (`url` + optional `root: "."`) |
 | `platform-repos.local.json` | **Member** (any toolkit `init` ensures skeleton) | Machine checkout roots for platform repos |
 | `legacy-repos.local.json` | **Member** (any toolkit `init` ensures skeleton) | Machine checkout roots for `legacy-*` / brownfield |
 
 Schemas:
 
 - `templates/schemas/platform-repos.schema.json` (DNA)
-- Bundlekit `templates/schemas/legacy-repos.schema.json` (portable legacy)
+- Docskit `templates/schemas/legacy-repos.schema.json` (portable legacy)
 
 Helper SSOT: `ensureLocalRepoMaps(root)` exported from `@platform/platform-dna`.
 Every toolkit `init` may call it — **create-if-missing only**; existing member
@@ -51,7 +51,7 @@ Rules:
 - **Platform DNA is the only writer** of portable `platform-repos*`. Specialist
   kits never create or modify those files; each kit tracks installed skills in
   its own `install-manifest.json`.
-- DNA does **not** seed portable `legacy-repos.json` — Bundlekit owns that.
+- DNA does **not** seed portable `legacy-repos.json` — Docskit owns that.
 
 ## Machine-local maps
 
@@ -131,4 +131,4 @@ shared ignore lines stay so other toolkits can keep using the maps.
 unmodified harness assets. It never prunes project maps or another toolkit's
 files.
 
-Legacy portable evidence seeding lives in Bundlekit, not Platform DNA.
+Legacy portable evidence seeding lives in Docskit, not Platform DNA.

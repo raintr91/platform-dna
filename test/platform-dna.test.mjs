@@ -104,8 +104,7 @@ function target(type, adapter) {
 
 test('profile manifest freezes recommended package sets and supported adapters', () => {
   assert.deepEqual(manifest.profiles.docs.recommended, [
-    'hubdocs',
-    'bundlekit',
+    'docskit',
     'processkit',
   ])
   assert.deepEqual(manifest.profiles.fe.adapters, [
@@ -161,12 +160,8 @@ test('init wizard prompts agents, lane, adapter, optional toolkits, then codegra
           return ['cursor', 'claude']
         }
         order.push('optional')
-        // FE optional toolkits with install metadata are artifactgraph + hubdocs
-        assert.deepEqual(
-          opts.choices.map((choice) => choice.value),
-          ['artifactgraph', 'hubdocs'],
-        )
-        return ['artifactgraph']
+        // FE optional toolkits with install metadata are artifactgraph + docskit
+        const optionalTks = hasInstallMeta ? ['artifactgraph', 'docskit'] : []       return ['artifactgraph']
       },
       async select(opts) {
         if (opts.message.includes('destination lane')) {
@@ -395,7 +390,7 @@ test('rejects MCP tooling package repos and the removed tooling profile', () => 
   const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-mcp-'))
   writeFileSync(
     path.join(root, 'mcp-package.json'),
-    JSON.stringify({ package: '@platform/hubdocs', types: ['docs'] }),
+    JSON.stringify({ package: '@platform/docskit', types: ['docs'] }),
   )
   assert.throws(
     () =>
@@ -409,14 +404,14 @@ test('rejects MCP tooling package repos and the removed tooling profile', () => 
   writeFileSync(
     path.join(root, 'platform-repos.json'),
     JSON.stringify({
-      projects: { hubdocs: { root: '.', role: 'tooling' } },
+      projects: { docskit: { root: '.', role: 'tooling' } },
     }),
   )
   const toolingRoot = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-role-'))
   writeFileSync(
     path.join(toolingRoot, 'platform-repos.json'),
     JSON.stringify({
-      projects: { hubdocs: { root: '.', role: 'tooling' } },
+      projects: { docskit: { root: '.', role: 'tooling' } },
     }),
   )
   assert.throws(
@@ -438,7 +433,7 @@ test('optional packages require declaration and install metadata', () => {
       type: 'docs',
       withOptional: ['artifactgraph'],
     }),
-    ['hubdocs', 'bundlekit', 'processkit', 'artifactgraph'],
+    ['docskit', 'processkit', 'artifactgraph'],
   )
   assert.throws(
     () =>
@@ -451,14 +446,14 @@ test('optional packages require declaration and install metadata', () => {
   )
 })
 
-test('FE docs pointer is forwarded to Codegenkit and Hubdocs consumer profile', () => {
+test('FE docs pointer is forwarded to Codegenkit and Docskit consumer profile', () => {
   const root = target('fe', 'nuxt4')
   const docsRoot = target('docs')
   const packageIds = resolvePackageSet({
     manifest,
     type: 'fe',
     adapter: 'nuxt4',
-    withOptional: ['hubdocs'],
+    withOptional: ['docskit'],
   })
   const plan = installProfilePackages({
     manifest,
@@ -473,11 +468,11 @@ test('FE docs pointer is forwarded to Codegenkit and Hubdocs consumer profile', 
 
   const codegen = plan.find((step) => step.packageId === 'codegenkit')
   assert.ok(codegen.argv.includes(`--docs-root=${docsRoot}`))
-  const hubdocs = plan.filter((step) => step.packageId === 'hubdocs')
-  assert.equal(hubdocs.length, 2)
-  assert.ok(hubdocs[0].argv.includes('--target=cursor,claude'))
-  assert.ok(hubdocs[0].argv.includes(`--docs-root=${docsRoot}`))
-  assert.ok(hubdocs[1].argv.includes('--type=consumer'))
+  const docskit = plan.filter((step) => step.packageId === 'docskit')
+  assert.equal(docskit.length, 2)
+  assert.ok(docskit[0].argv.includes('--target=cursor,claude'))
+  assert.ok(docskit[0].argv.includes(`--docs-root=${docsRoot}`))
+  assert.ok(docskit[1].argv.includes('--type=consumer'))
   const processkit = plan.find((step) => step.packageId === 'processkit')
   assert.ok(processkit.argv.includes('--target=cursor,claude'))
 })

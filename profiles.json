@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "profiles": {
     "docs": {
-      "recommended": ["hubdocs", "bundlekit", "processkit"],
+      "recommended": ["docskit", "processkit"],
       "optional": ["artifactgraph", "codegraph"],
       "repoMarkers": ["architecture", "product"]
     },
     "fe": {
       "recommended": ["codegenkit", "testkit", "processkit"],
-      "optional": ["artifactgraph", "codegraph", "hubdocs"],
+      "optional": ["artifactgraph", "codegraph", "docskit"],
       "requiresAdapter": true,
       "adapters": ["nuxt4", "nextjs", "dotnet-line"],
       "repoMarkers": ["package.json", "*.sln"],
@@ -16,7 +16,7 @@
     },
     "be": {
       "recommended": ["codegenkit", "processkit"],
-      "optional": ["artifactgraph", "codegraph", "hubdocs"],
+      "optional": ["artifactgraph", "codegraph", "docskit"],
       "requiresAdapter": true,
       "adapters": ["fastapi", "laravel", "dotnet-integration"],
       "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json", "*.sln"]
@@ -28,10 +28,10 @@
     }
   },
   "packages": {
-    "hubdocs": {
-      "repository": "https://github.com/raintr91/hubdocs.git",
-      "command": "hubdocs",
-      "bin": "bin/hubdocs.mjs",
+    "docskit": {
+      "repository": "https://github.com/raintr91/docskit.git",
+      "command": "docskit",
+      "bin": "bin/docskit.mjs",
       "types": ["docs", "fe", "be", "tests"],
       "invocations": {
         "docs": [
@@ -50,15 +50,6 @@
           ["init", "--target={target}", "--location=local", "--yes", "{docsRootArg}"],
           ["harness", "install", "--type=consumer", "--project-root={projectRoot}", "{force}"]
         ]
-      }
-    },
-    "bundlekit": {
-      "repository": "https://github.com/raintr91/Bundlekit.git",
-      "command": "bundlekit",
-      "bin": "bin/bundlekit.mjs",
-      "types": ["docs"],
-      "invocations": {
-        "docs": [["init", "--type=docs", "--target={target}", "--yes", "--project-root={projectRoot}", "{force}"]]
       }
     },
     "processkit": {

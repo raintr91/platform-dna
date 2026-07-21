@@ -15,7 +15,7 @@ filename only when DNA is absent, so a destination never carries duplicate
 
 Route by intent:
 
-- Need an architecture ID or C4 path -> Hubdocs MCP (`HUBDOCS_ROOT`). Never
+- Need an architecture ID or C4 path -> Docskit MCP (`DOCSKIT_ROOT`). Never
   CodeGraph for architecture Markdown.
 - Need IR / registry / generation -> the pointer kit
   (`CODEGENKIT_DOCS_ROOT`, `TESTKIT_DOCS_ROOT`, `TESTKIT_TESTS_ROOT`).
