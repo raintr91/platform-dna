@@ -12,12 +12,14 @@
   "optional": [],
   "tools": [],
   "skillsByType": {
-    "docs": [],
+    "docs": ["legacy", "configure-repo-maps"],
     "fe": [
-      "platform-base"
+      "platform-base",
+      "legacy",
+      "configure-repo-maps"
     ],
-    "be": [],
-    "tests": []
+    "be": ["legacy", "configure-repo-maps"],
+    "tests": ["legacy", "configure-repo-maps"]
   },
   "ownedRules": [],
   "compatibility": {
