@@ -4,7 +4,7 @@ set -euo pipefail
 REPO="${PLATFORM_DNA_REPO:-raintr91/platform-dna}"
 INSTALL_DIR="${PLATFORM_DNA_INSTALL_DIR:-$HOME/.platform-dna/bootstrap}"
 BIN_DIR="${PLATFORM_DNA_BIN_DIR:-$HOME/.local/bin}"
-REF="${PLATFORM_DNA_REF:-v0.4.0}"
+REF="${PLATFORM_DNA_REF:-main}"
 
 command -v node >/dev/null
 command -v git >/dev/null
