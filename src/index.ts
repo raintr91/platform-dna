@@ -42,7 +42,3 @@ export {
   removeLedger,
   stateDir,
 } from './install/ledger.js'
-export {
-  installProfilePackages,
-  resolvePackageSet,
-} from './install/packages.js'
