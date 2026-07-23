@@ -29,6 +29,7 @@ import {
   isVendorThinConfigureRepoMaps,
 } from './configure-repo-maps.js'
 import { localMapsStatus, type LocalMapStatus } from './local-maps.js'
+import { agentDirs, type AgentId } from './agents.js'
 
 export interface InstallManifestFile {
   source: string
@@ -113,22 +114,22 @@ function walk(root: string, opts?: { skipNames?: Set<string> }): string[] {
   })
 }
 
-/** Map harness source path → installed .cursor relative path. */
-export function harnessSourceToTarget(source: string): string {
+/** Map harness source path → installed agent relative path. */
+export function harnessSourceToTarget(source: string, agentDir: string = '.cursor'): string {
   const parts = source.split('/')
   if (parts[0] !== 'harness') {
     throw new Error(`Invalid Platform DNA harness source: ${source}`)
   }
-  // harness/fe/adapters/<adapter>/skills/... → .cursor/skills/...
+  // harness/fe/adapters/<adapter>/skills/... → agentDir/skills/...
   if (
     parts[2] === 'adapters' &&
     parts[3] &&
     (parts[1] === 'fe' || parts[1] === 'be' || parts[1] === 'docs' || parts[1] === 'tests')
   ) {
-    return `.cursor/${parts.slice(4).join('/')}`
+    return `${agentDir}/${parts.slice(4).join('/')}`
   }
-  // harness/common|docs|fe|be|tests/<rel> → .cursor/<rel>
-  return `.cursor/${parts.slice(2).join('/')}`
+  // harness/common|docs|fe|be|tests/<rel> → agentDir/<rel>
+  return `${agentDir}/${parts.slice(2).join('/')}`
 }
 
 function manifestFile(root: string): string {
@@ -179,7 +180,9 @@ function isProtectedPath(relative: string): boolean {
 
 function validateManifestFile(targetRel: string, value: unknown): InstallManifestFile {
   const relative = normalizedRelative(targetRel, 'file path')
-  if (!relative.startsWith('.cursor/') || isProtectedPath(relative)) {
+  const agentDir = relative.split('/')[0]
+  const validAgentDirs = Object.values(agentDirs)
+  if (!validAgentDirs.includes(agentDir) || isProtectedPath(relative)) {
     throw new Error(`Manifest contains a non-DNA or protected path: ${relative}`)
   }
   if (!isRecord(value)) throw new Error(`Invalid manifest file record: ${relative}`)
@@ -189,7 +192,7 @@ function validateManifestFile(targetRel: string, value: unknown): InstallManifes
   ) {
     throw new Error(`Manifest contains a non-DNA source: ${source}`)
   }
-  const expectedTarget = harnessSourceToTarget(source)
+  const expectedTarget = harnessSourceToTarget(source, agentDir)
   if (expectedTarget !== relative) {
     throw new Error(`Manifest source/target mismatch: ${source} -> ${relative}`)
   }
@@ -498,6 +501,7 @@ export function installHarness(opts: {
   seededMaps?: SeededProjectMap[]
   gitignoreEntries?: OwnedGitignoreEntry[]
   mcp?: InstallManifestMcp
+  targets?: AgentId[]
 }): { written: string[]; unchanged: string[]; conflicts: string[] } {
   const targetRoot = path.resolve(opts.root)
   const previous = readInstallManifest(targetRoot)
@@ -528,39 +532,47 @@ export function installHarness(opts: {
     ]),
   )
 
+  const targets = opts.targets ?? ['cursor']
+  const targetDirs = targets.map((t) => agentDirs[t])
+
   for (const sourceRoot of roots) {
     for (const source of walk(sourceRoot.dir, { skipNames: sourceRoot.skipNames })) {
       const sourceRel = path.relative(packageRoot(), source).split(path.sep).join('/')
-      const targetRel = harnessSourceToTarget(sourceRel)
-      const target = targetPath(targetRoot, targetRel)
       const content = readFileSync(source, 'utf8')
-      files[targetRel] = {
-        source: sourceRel,
-        sha256: hash(content),
-        state: 'active',
+      const sourceHash = hash(content)
+
+      for (const agentDir of targetDirs) {
+        const targetRel = harnessSourceToTarget(sourceRel, agentDir)
+        const target = targetPath(targetRoot, targetRel)
+        
+        files[targetRel] = {
+          source: sourceRel,
+          sha256: sourceHash,
+          state: 'active',
+        }
+        if (existsSync(target)) {
+          if (!lstatSync(target).isFile()) {
+            result.conflicts.push(target)
+            continue
+          }
+          const current = readFileSync(target, 'utf8')
+          if (current === content) {
+            result.unchanged.push(target)
+            continue
+          }
+          const safe = previous?.files[targetRel]?.sha256 === hash(current)
+          // Thin Docskit/Processkit copies of /configure-repo-maps yield to DNA SSOT.
+          const replaceThin =
+            targetRel.endsWith('skills/configure-repo-maps/SKILL.md') && isVendorThinConfigureRepoMaps(current)
+          if (!opts.force && !safe && !replaceThin) {
+            result.conflicts.push(target)
+            continue
+          }
+        }
+        mkdirSync(path.dirname(target), { recursive: true })
+        writeFileSync(target, content)
+        result.written.push(target)
       }
-      if (existsSync(target)) {
-        if (!lstatSync(target).isFile()) {
-          result.conflicts.push(target)
-          continue
-        }
-        const current = readFileSync(target, 'utf8')
-        if (current === content) {
-          result.unchanged.push(target)
-          continue
-        }
-        const safe = previous?.files[targetRel]?.sha256 === hash(current)
-        // Thin Docskit/Processkit copies of /configure-repo-maps yield to DNA SSOT.
-        const replaceThin =
-          targetRel === CONFIGURE_REPO_MAPS_REL && isVendorThinConfigureRepoMaps(current)
-        if (!opts.force && !safe && !replaceThin) {
-          result.conflicts.push(target)
-          continue
-        }
-      }
-      mkdirSync(path.dirname(target), { recursive: true })
-      writeFileSync(target, content)
-      result.written.push(target)
     }
   }
 

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { ProfileType } from '../config/project-root.js'
-import type { OwnedGitignoreEntry } from './gitignore.js'
+import { ensureGitignoreEntries, type OwnedGitignoreEntry } from './gitignore.js'
 import {
   ensureLocalRepoMaps,
   type EnsureLocalRepoMapsResult,
@@ -134,7 +134,23 @@ export function seedProjectMaps(opts: {
   const localMaps = ensureLocalRepoMaps(root)
   for (const file of localMaps.created) written.push(path.join(root, file))
   for (const file of localMaps.skipped) unchanged.push(path.join(root, file))
-  if (localMaps.gitignoreAdded.length) written.push(path.join(root, '.gitignore'))
+
+  const additionalIgnores = [
+    '.platform-dna',
+    'platform-repos.json',
+    'platform-repos.example.json',
+    'legacy-repos.json',
+    'legacy-repos.example.json'
+  ]
+  const extraGitignore = ensureGitignoreEntries(root, additionalIgnores)
+
+  const gitignoreEntries: OwnedGitignoreEntry[] = [
+    ...localMaps.gitignoreEntries,
+    ...additionalIgnores.map((pattern) => ({ pattern, shared: true }))
+  ]
+
+  const hasGitignoreAdded = localMaps.gitignoreAdded.length > 0 || extraGitignore.added.length > 0
+  if (hasGitignoreAdded) written.push(path.join(root, '.gitignore'))
   else unchanged.push(path.join(root, '.gitignore'))
 
   return {
@@ -153,7 +169,7 @@ export function seedProjectMaps(opts: {
       },
     ],
     localMaps,
-    gitignoreAdded: localMaps.gitignoreAdded.length > 0,
-    gitignoreEntries: localMaps.gitignoreEntries,
+    gitignoreAdded: hasGitignoreAdded,
+    gitignoreEntries,
   }
 }

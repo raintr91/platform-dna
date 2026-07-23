@@ -28,6 +28,18 @@ export const agentNames: Record<AgentId, string> = {
   kilo: 'Kilo Code',
 }
 
+export const agentDirs: Record<AgentId, string> = {
+  claude: '.claude',
+  cursor: '.cursor',
+  codex: '.codex',
+  opencode: '.opencode',
+  hermes: '.hermes',
+  gemini: '.gemini',
+  antigravity: '.agents',
+  kiro: '.kiro',
+  kilo: '.kilo',
+}
+
 const agentAliases: Record<string, AgentId> = {
   claude: 'claude',
   cursor: 'cursor',

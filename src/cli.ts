@@ -369,6 +369,7 @@ async function main(): Promise<void> {
     seededMaps: maps.maps,
     gitignoreEntries,
     mcp: mcpManifest,
+    targets,
   })
   for (const file of harness.written) console.log(`  wrote: ${file}`)
   for (const file of harness.unchanged) console.log(`  unchanged: ${file}`)

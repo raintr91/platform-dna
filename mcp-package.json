@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": "@platform/platform-dna",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "types": [
     "docs",
     "fe",
@@ -12,14 +12,23 @@
   "optional": [],
   "tools": [],
   "skillsByType": {
-    "docs": ["legacy", "configure-repo-maps"],
+    "docs": [
+      "legacy",
+      "configure-repo-maps"
+    ],
     "fe": [
       "platform-base",
       "legacy",
       "configure-repo-maps"
     ],
-    "be": ["legacy", "configure-repo-maps"],
-    "tests": ["legacy", "configure-repo-maps"]
+    "be": [
+      "legacy",
+      "configure-repo-maps"
+    ],
+    "tests": [
+      "legacy",
+      "configure-repo-maps"
+    ]
   },
   "ownedRules": [],
   "compatibility": {
