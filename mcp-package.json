@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": "@platform/platform-dna",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "types": [
     "docs",
     "fe",

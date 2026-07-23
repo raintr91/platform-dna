@@ -114,6 +114,22 @@ function walk(root: string, opts?: { skipNames?: Set<string> }): string[] {
   })
 }
 
+function pruneEmptyDirs(root: string, file: string) {
+  let current = path.dirname(file)
+  while (current !== root && current.length > root.length) {
+    try {
+      if (readdirSync(current).length === 0) {
+        rmdirSync(current)
+        current = path.dirname(current)
+      } else {
+        break
+      }
+    } catch {
+      break
+    }
+  }
+}
+
 /** Map harness source path → installed agent relative path. */
 export function harnessSourceToTarget(source: string, agentDir: string = '.cursor'): string {
   const parts = source.split('/')
@@ -453,6 +469,7 @@ export function pruneHarness(opts: { root: string; yes?: boolean }): PruneHarnes
       unlinkSync(target)
       delete manifest.files[file.path]
       result.deleted.push(target)
+      pruneEmptyDirs(targetRoot, target)
     } else {
       result.skipped.push(fileStatus(targetRoot, file.path, file))
     }
@@ -674,6 +691,7 @@ export function uninstallHarness(opts: {
     else {
       unlinkSync(target)
       result.deleted.push(target)
+      pruneEmptyDirs(targetRoot, target)
     }
   }
 
