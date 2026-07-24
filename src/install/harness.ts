@@ -20,12 +20,13 @@ import type { SeededProjectMap } from './maps.js'
 import { forgetInstall, recordInstall } from './ledger.js'
 import {
   canonicalGitignorePattern,
+  ensureGitignoreEntries,
   removeGitignoreEntries,
   type OwnedGitignoreEntry,
 } from './gitignore.js'
 import { mcpEntryHash, removeMcpServers } from './mcp-config.js'
 import {
-  CONFIGURE_REPO_MAPS_REL,
+  isDnaConfigureRepoMapsSsot,
   isVendorThinConfigureRepoMaps,
 } from './configure-repo-maps.js'
 import { localMapsStatus, type LocalMapStatus } from './local-maps.js'
@@ -550,7 +551,15 @@ export function installHarness(opts: {
   )
 
   const targets = opts.targets ?? ['cursor']
-  const targetDirs = targets.map((t) => agentDirs[t])
+  const targetDirs = [...new Set(targets.map((t) => agentDirs[t]))]
+
+  // Claim selected agent dirs in .gitignore (shared — other toolkits also write there).
+  const agentIgnorePatterns = targetDirs.map((dir) => `${dir}/`)
+  const agentGitignore = ensureGitignoreEntries(targetRoot, agentIgnorePatterns)
+  const agentGitignoreEntries: OwnedGitignoreEntry[] = agentIgnorePatterns.map((pattern) => ({
+    pattern,
+    shared: true,
+  }))
 
   for (const sourceRoot of roots) {
     for (const source of walk(sourceRoot.dir, { skipNames: sourceRoot.skipNames })) {
@@ -561,29 +570,43 @@ export function installHarness(opts: {
       for (const agentDir of targetDirs) {
         const targetRel = harnessSourceToTarget(sourceRel, agentDir)
         const target = targetPath(targetRoot, targetRel)
-        
+
         files[targetRel] = {
           source: sourceRel,
           sha256: sourceHash,
           state: 'active',
         }
         if (existsSync(target)) {
+          // Unclean bases sometimes leave an empty dir where the skill file should be.
           if (!lstatSync(target).isFile()) {
-            result.conflicts.push(target)
-            continue
-          }
-          const current = readFileSync(target, 'utf8')
-          if (current === content) {
-            result.unchanged.push(target)
-            continue
-          }
-          const safe = previous?.files[targetRel]?.sha256 === hash(current)
-          // Thin Docskit/Processkit copies of /configure-repo-maps yield to DNA SSOT.
-          const replaceThin =
-            targetRel.endsWith('skills/configure-repo-maps/SKILL.md') && isVendorThinConfigureRepoMaps(current)
-          if (!opts.force && !safe && !replaceThin) {
-            result.conflicts.push(target)
-            continue
+            try {
+              if (readdirSync(target).length === 0) {
+                rmdirSync(target)
+              } else {
+                result.conflicts.push(target)
+                continue
+              }
+            } catch {
+              result.conflicts.push(target)
+              continue
+            }
+          } else {
+            const current = readFileSync(target, 'utf8')
+            if (current === content) {
+              result.unchanged.push(target)
+              continue
+            }
+            const safe = previous?.files[targetRel]?.sha256 === hash(current)
+            // DNA owns /configure-repo-maps SSOT: thin or non-SSOT copies yield without --force
+            // so unclean FastAPI/Laravel bases do not abort init.
+            const configureRel = targetRel.endsWith('skills/configure-repo-maps/SKILL.md')
+            const replaceConfigure =
+              configureRel &&
+              (isVendorThinConfigureRepoMaps(current) || !isDnaConfigureRepoMapsSsot(current))
+            if (!opts.force && !safe && !replaceConfigure) {
+              result.conflicts.push(target)
+              continue
+            }
           }
         }
         mkdirSync(path.dirname(target), { recursive: true })
@@ -608,8 +631,14 @@ export function installHarness(opts: {
       )
       : previous?.maps,
   }
-  const gitignore = mergeGitignore(previous?.gitignore, opts.gitignoreEntries)
+  const gitignore = mergeGitignore(
+    previous?.gitignore,
+    mergeGitignore(opts.gitignoreEntries, agentGitignoreEntries),
+  )
   if (gitignore.length) manifest.gitignore = gitignore
+  if (agentGitignore.changed) {
+    result.written.push(agentGitignore.file)
+  }
   const mcp = mergeManifestMcp(previous?.mcp, opts.mcp)
   if (mcp) manifest.mcp = mcp
   const installManifest = targetPath(targetRoot, '.platform-dna/install-manifest.json')

@@ -1,6 +1,6 @@
 {
   "name": "@platform/platform-dna",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Destination-repo profile resolver, repo identity map, and FE platform-base bootstrap",
   "type": "module",
   "main": "./dist/index.js",

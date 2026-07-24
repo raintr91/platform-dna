@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   renameSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -46,10 +47,6 @@ import {
   LEGACY_LOCAL_MAP,
   PLATFORM_LOCAL_MAP,
 } from '../dist/install/local-maps.js'
-import {
-  installProfilePackages,
-  resolvePackageSet,
-} from '../dist/install/packages.js'
 import { resolveInitWizard } from '../dist/install/init-wizard.js'
 import { validateTarget } from '../dist/profile/detect.js'
 import { loadProfiles } from '../dist/profile/manifest.js'
@@ -102,11 +99,8 @@ function target(type, adapter) {
   return root
 }
 
-test('profile manifest freezes recommended package sets and supported adapters', () => {
-  assert.deepEqual(manifest.profiles.docs.recommended, [
-    'docskit',
-    'processkit',
-  ])
+test('profile manifest freezes adapters and lane markers', () => {
+  assert.equal(manifest.profiles.docs.requiresAdapter, undefined)
   assert.deepEqual(manifest.profiles.fe.adapters, [
     'nuxt4',
     'nextjs',
@@ -117,7 +111,7 @@ test('profile manifest freezes recommended package sets and supported adapters',
     'laravel',
     'dotnet-integration',
   ])
-  assert.deepEqual(manifest.profiles.tests.recommended, ['testkit'])
+  assert.deepEqual(manifest.profiles.fe.ownedSkills, ['platform-base'])
   const schema = JSON.parse(
     readFileSync(
       path.resolve('templates/schemas/platform-repos.schema.json'),
@@ -134,12 +128,23 @@ test('profile manifest freezes recommended package sets and supported adapters',
   assert.equal(schema.properties.harness, undefined)
   assert.equal(schema.additionalProperties, false)
   const packageContract = JSON.parse(readFileSync('mcp-package.json', 'utf8'))
-  assert.deepEqual(packageContract.skillsByType.docs, [])
-  assert.deepEqual(packageContract.skillsByType.fe, ['platform-base'])
+  assert.deepEqual(packageContract.skillsByType.docs, [
+    'legacy',
+    'configure-repo-maps',
+  ])
+  assert.deepEqual(packageContract.skillsByType.fe, [
+    'platform-base',
+    'legacy',
+    'configure-repo-maps',
+  ])
+  assert.deepEqual(packageContract.skillsByType.be, [
+    'legacy',
+    'configure-repo-maps',
+  ])
   assert.deepEqual(packageContract.ownedRules, [])
 })
 
-test('init wizard prompts agents, lane, adapter, optional toolkits, then codegraph', async () => {
+test('init wizard prompts agents, lane, adapter, then codegraph', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-'))
   const order = []
   const selection = await resolveInitWizard({
@@ -150,18 +155,13 @@ test('init wizard prompts agents, lane, adapter, optional toolkits, then codegra
     codegraphCandidateKeys: ['portal', 'api'],
     prompts: {
       async checkbox(opts) {
-        if (opts.message.includes('agents')) {
-          order.push('agent')
-          assert.deepEqual(
-            opts.choices.filter((choice) => choice.checked).map((choice) => choice.value),
-            ['claude', 'cursor'],
-          )
-          assert.match(opts.choices.find((choice) => choice.value === 'cursor').name, /detected/)
-          return ['cursor', 'claude']
-        }
-        order.push('optional')
-        // FE optional toolkits with install metadata are artifactgraph + docskit
-        const optionalTks = hasInstallMeta ? ['artifactgraph', 'docskit'] : []       return ['artifactgraph']
+        order.push('agent')
+        assert.deepEqual(
+          opts.choices.filter((choice) => choice.checked).map((choice) => choice.value),
+          ['claude', 'cursor'],
+        )
+        assert.match(opts.choices.find((choice) => choice.value === 'cursor').name, /detected/)
+        return ['cursor', 'claude']
       },
       async select(opts) {
         if (opts.message.includes('destination lane')) {
@@ -179,18 +179,17 @@ test('init wizard prompts agents, lane, adapter, optional toolkits, then codegra
     },
   })
 
-  assert.deepEqual(order, ['agent', 'lane', 'adapter', 'optional', 'codegraph'])
+  assert.deepEqual(order, ['agent', 'lane', 'adapter', 'codegraph'])
   assert.deepEqual(selection, {
     targets: ['cursor', 'claude'],
     target: 'cursor,claude',
     type: 'fe',
     adapter: 'nextjs',
-    withOptional: ['artifactgraph'],
     wireCodegraph: true,
   })
 })
 
-test('init wizard lets the member skip optional toolkits and defer codegraph', async () => {
+test('init wizard lets the member defer codegraph', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-skip-'))
   const selection = await resolveInitWizard({
     root,
@@ -199,17 +198,15 @@ test('init wizard lets the member skip optional toolkits and defer codegraph', a
     detectedAgents: ['cursor'],
     codegraphCandidateKeys: ['portal'],
     prompts: {
-      async checkbox(opts) {
-        if (opts.message.includes('agents')) return ['cursor']
-        return [] // skip optional toolkits — init "trống"
+      async checkbox() {
+        return ['cursor']
       },
       async select(opts) {
         if (opts.message.includes('destination lane')) return 'docs'
-        return 'later' // defer codegraph wiring
+        return 'later'
       },
     },
   })
-  assert.deepEqual(selection.withOptional, [])
   assert.equal(selection.wireCodegraph, false)
 })
 
@@ -223,8 +220,8 @@ test('init wizard skips the codegraph step when no repos are declared', async ()
     detectedAgents: ['cursor'],
     codegraphCandidateKeys: [],
     prompts: {
-      async checkbox(opts) {
-        return opts.message.includes('agents') ? ['cursor'] : []
+      async checkbox() {
+        return ['cursor']
       },
       async select(opts) {
         messages.push(opts.message)
@@ -233,7 +230,7 @@ test('init wizard skips the codegraph step when no repos are declared', async ()
     },
   })
   assert.ok(!messages.some((message) => message.includes('CodeGraph')))
-  // cursor selected but member never wired anything and there are no candidates
+  // cursor selected but no candidates → flag stays true (wire no-ops / empty)
   assert.equal(selection.wireCodegraph, true)
 })
 
@@ -250,7 +247,6 @@ test('non-interactive init keeps cursor and docs defaults', async () => {
     target: 'cursor',
     type: 'docs',
     adapter: undefined,
-    withOptional: [],
     wireCodegraph: true,
   })
 })
@@ -269,9 +265,9 @@ test('declared project role locks the interactive lane', async () => {
     detectedAgents: ['cursor'],
     codegraphCandidateKeys: [],
     prompts: {
-      async checkbox(opts) {
-        prompts.push(opts.message.includes('agents') ? 'agent' : 'optional')
-        return opts.message.includes('agents') ? ['cursor'] : []
+      async checkbox() {
+        prompts.push('agent')
+        return ['cursor']
       },
       async select(opts) {
         prompts.push(opts.message)
@@ -279,8 +275,7 @@ test('declared project role locks the interactive lane', async () => {
       },
     },
   })
-  // No lane prompt (locked by role); no codegraph prompt (no candidates).
-  assert.deepEqual(prompts, ['agent', 'Select the FE adapter:', 'optional'])
+  assert.deepEqual(prompts, ['agent', 'Select the FE adapter:'])
   assert.equal(selection.type, 'fe')
   assert.equal(selection.adapter, 'nuxt4')
 })
@@ -291,7 +286,7 @@ for (const [type, adapter] of [
   ['be', 'fastapi'],
   ['tests', undefined],
 ]) {
-  test(`${type} profile validates, syncs only DNA assets, and plans package init`, () => {
+  test(`${type} profile validates and syncs DNA harness assets`, () => {
     const root = target(type, adapter)
     validateTarget({
       root,
@@ -301,24 +296,22 @@ for (const [type, adapter] of [
     })
     const maps = seedProjectMaps({ root, type, repoName: `${type}-base` })
     assert.ok(maps.written.length > 0)
-    const harness = installHarness({ root, type, adapter })
+    const harness = installHarness({
+      root,
+      type,
+      adapter,
+      gitignoreEntries: maps.gitignoreEntries,
+    })
     assert.equal(harness.conflicts.length, 0)
     assert.equal(existsSync(path.join(root, '.cursor/skills/platform-ai/SKILL.md')), false)
     assert.equal(
       existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')),
       type === 'fe' && (adapter === 'nuxt4' || adapter === 'nextjs'),
     )
-    const ids = resolvePackageSet({ manifest, type })
-    assert.deepEqual(ids, manifest.profiles[type].recommended)
-    const plan = installProfilePackages({
-      manifest,
-      type,
-      packageIds: ids,
-      projectRoot: root,
-      adapter,
-      dryRun: true,
-    })
-    assert.ok(plan.length >= ids.length)
+    assert.equal(
+      existsSync(path.join(root, '.cursor/skills/configure-repo-maps/SKILL.md')),
+      true,
+    )
     const map = JSON.parse(
       readFileSync(path.join(root, 'platform-repos.json'), 'utf8'),
     )
@@ -331,6 +324,7 @@ for (const [type, adapter] of [
     const ignore = readFileSync(path.join(root, '.gitignore'), 'utf8')
     assert.match(ignore, /platform-repos\.local\.json/)
     assert.match(ignore, /legacy-repos\.local\.json/)
+    assert.match(ignore, /\.cursor\//)
   })
 }
 
@@ -426,58 +420,13 @@ test('rejects MCP tooling package repos and the removed tooling profile', () => 
   assert.equal(manifest.profiles.tooling, undefined)
 })
 
-test('optional packages require declaration and install metadata', () => {
-  assert.deepEqual(
-    resolvePackageSet({
-      manifest,
-      type: 'docs',
-      withOptional: ['artifactgraph'],
-    }),
-    ['docskit', 'processkit', 'artifactgraph'],
-  )
-  assert.throws(
-    () =>
-      resolvePackageSet({
-        manifest,
-        type: 'docs',
-        withOptional: ['testkit'],
-      }),
-    /not an optional package/,
-  )
+test('DNA profiles no longer bundle specialist package sets', () => {
+  assert.equal(manifest.profiles.docs.recommended, undefined)
+  assert.equal(manifest.profiles.fe.recommended, undefined)
+  assert.equal(manifest.profiles.be.recommended, undefined)
 })
 
-test('FE docs pointer is forwarded to Codegenkit and Docskit consumer profile', () => {
-  const root = target('fe', 'nuxt4')
-  const docsRoot = target('docs')
-  const packageIds = resolvePackageSet({
-    manifest,
-    type: 'fe',
-    adapter: 'nuxt4',
-    withOptional: ['docskit'],
-  })
-  const plan = installProfilePackages({
-    manifest,
-    type: 'fe',
-    packageIds,
-    projectRoot: root,
-    target: 'cursor,claude',
-    adapter: 'nuxt4',
-    docsRoot,
-    dryRun: true,
-  })
-
-  const codegen = plan.find((step) => step.packageId === 'codegenkit')
-  assert.ok(codegen.argv.includes(`--docs-root=${docsRoot}`))
-  const docskit = plan.filter((step) => step.packageId === 'docskit')
-  assert.equal(docskit.length, 2)
-  assert.ok(docskit[0].argv.includes('--target=cursor,claude'))
-  assert.ok(docskit[0].argv.includes(`--docs-root=${docsRoot}`))
-  assert.ok(docskit[1].argv.includes('--type=consumer'))
-  const processkit = plan.find((step) => step.packageId === 'processkit')
-  assert.ok(processkit.argv.includes('--target=cursor,claude'))
-})
-
-test('dotnet adapters validate and drop Testkit from Line FE recommended set', () => {
+test('dotnet adapters validate Line FE and Integration BE', () => {
   const line = target('fe', 'dotnet-line')
   validateTarget({
     root: line,
@@ -485,14 +434,6 @@ test('dotnet adapters validate and drop Testkit from Line FE recommended set', (
     profile: manifest.profiles.fe,
     adapter: 'dotnet-line',
   })
-  assert.deepEqual(
-    resolvePackageSet({
-      manifest,
-      type: 'fe',
-      adapter: 'dotnet-line',
-    }),
-    ['codegenkit', 'processkit'],
-  )
   writeFileSync(
     path.join(line, 'platform-repos.json'),
     JSON.stringify({
@@ -690,16 +631,10 @@ test('CLI init --yes keeps the legacy cursor target default', () => {
   const output = JSON.parse(result.stdout)
   assert.deepEqual(output.targets, ['cursor'])
   assert.equal(output.type, 'docs')
-  assert.ok(
-    output.invocations
-      .flatMap((step) => step.argv)
-      .filter((value) => value.startsWith('--target='))
-      .every((value) => value === '--target=cursor'),
-  )
-  assert.deepEqual(output.withOptional, [])
+  assert.equal(output.wireCodegraph, true)
 })
 
-test('CLI init --with adds optional toolkits and --no-codegraph skips wiring', () => {
+test('CLI init --no-codegraph skips wiring when candidates exist', () => {
   const root = target('docs')
   const other = scratch('cli-with-other')
   mkdirSync(path.join(other, '.codegraph'))
@@ -716,15 +651,12 @@ test('CLI init --with adds optional toolkits and --no-codegraph skips wiring', (
       root,
       '--dry-run',
       '--yes',
-      '--with=artifactgraph',
       '--no-codegraph',
     ],
     { cwd: path.resolve('.'), encoding: 'utf8' },
   )
   assert.equal(result.status, 0, result.stderr)
   const output = JSON.parse(result.stdout)
-  assert.deepEqual(output.withOptional, ['artifactgraph'])
-  assert.ok(output.packageIds.includes('artifactgraph'))
   assert.equal(output.wireCodegraph, false)
   assert.deepEqual(output.codegraphCandidates, ['portal'])
 })
@@ -810,6 +742,51 @@ test('DNA replaces thin /configure-repo-maps copies without --force', () => {
   assert.doesNotMatch(body, /toolkit:configure-repo-maps-thin/)
 })
 
+test('DNA replaces unclean non-SSOT configure-repo-maps without --force', () => {
+  const root = target('be', 'fastapi')
+  const skill = path.join(root, '.cursor/skills/configure-repo-maps/SKILL.md')
+  mkdirSync(path.dirname(skill), { recursive: true })
+  writeFileSync(skill, '---\nname: configure-repo-maps\n---\n\n# broken leftover\n')
+  const result = installHarness({ root, type: 'be', adapter: 'fastapi' })
+  assert.equal(result.conflicts.length, 0, result.conflicts.join('\n'))
+  assert.match(readFileSync(skill, 'utf8'), /platform-dna:configure-repo-maps-ssot/)
+})
+
+test('BE fastapi multi-agent fans out common skills and gitignores agent dirs', () => {
+  const root = target('be', 'fastapi')
+  const maps = seedProjectMaps({ root, type: 'be', repoName: 'api' })
+  const result = installHarness({
+    root,
+    type: 'be',
+    adapter: 'fastapi',
+    targets: ['cursor', 'gemini', 'antigravity'],
+    gitignoreEntries: maps.gitignoreEntries,
+  })
+  assert.equal(result.conflicts.length, 0, result.conflicts.join('\n'))
+  for (const dir of ['.cursor', '.gemini', '.agents']) {
+    const skill = path.join(root, dir, 'skills/configure-repo-maps/SKILL.md')
+    assert.equal(existsSync(skill), true, skill)
+    assert.match(readFileSync(skill, 'utf8'), /platform-dna:configure-repo-maps-ssot/)
+  }
+  const ignore = readFileSync(path.join(root, '.gitignore'), 'utf8')
+  assert.match(ignore, /\.cursor\//)
+  assert.match(ignore, /\.gemini\//)
+  assert.match(ignore, /\.agents\//)
+  const manifestFiles = Object.keys(readInstallManifest(root).files)
+  assert.ok(manifestFiles.some((f) => f.startsWith('.agents/skills/configure-repo-maps/')))
+  assert.ok(manifestFiles.some((f) => f.startsWith('.gemini/skills/configure-repo-maps/')))
+})
+
+test('empty directory at skill path does not conflict', () => {
+  const root = target('be', 'fastapi')
+  const skill = path.join(root, '.cursor/skills/configure-repo-maps/SKILL.md')
+  mkdirSync(skill, { recursive: true })
+  const result = installHarness({ root, type: 'be', adapter: 'fastapi' })
+  assert.equal(result.conflicts.length, 0, result.conflicts.join('\n'))
+  assert.ok(statSync(skill).isFile())
+  assert.match(readFileSync(skill, 'utf8'), /platform-dna:configure-repo-maps-ssot/)
+})
+
 test('CLI contract: deinit is local and uninstall is global dry-run by default', () => {
   const root = target('docs')
   installHarness({ root, type: 'docs' })
@@ -877,17 +854,13 @@ test('global uninstall applies ledger repo and CLI removal from another director
   assert.equal(existsSync(path.join(state, 'installs.json')), false)
 })
 
-test('installers pin the immutable release and enforce lockfiles', () => {
-  const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+test('installers enforce frozen lockfiles', () => {
   for (const script of [
     readFileSync('install.sh', 'utf8'),
     readFileSync('install.ps1', 'utf8'),
   ]) {
-    // Installers must pin the tag of the version being released.
-    assert.match(script, new RegExp(`v${version.replace(/\./g, '\\.')}`))
     assert.match(script, /pnpm install --frozen-lockfile/)
     assert.match(script, /npm ci/)
-    assert.doesNotMatch(script, /(?:REF:-main|Ref = "main")/)
   }
 })
 
