@@ -7,19 +7,23 @@ Profile resolver and repository identity bootstrap for **docs and code repos**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/raintr91/platform-dna/main/install.sh | bash  # install
-platform-dna init       # agents → lane → adapter (when required)
-platform-dna deinit     # remove Platform DNA from the current repo
-platform-dna uninstall  # remove all registered installs and the CLI
+platform-dna init              # agents → lane → adapter(s) → optional CodeGraph wire
+platform-dna codegraph:wire    # after maps + codegraph indexes exist (safe to run later)
+platform-dna deinit            # remove Platform DNA from the current repo
+platform-dna uninstall         # remove all registered installs and the CLI
 ```
 
 Run `init` from the destination repo. It detects installed agents and opens
-selectors in this order: agents, lane, then the adapter when the lane requires
-one. A lane already declared by `platform-repos.json` is locked.
+selectors in this order: agents, lane, then adapter(s) when the lane requires
+them (`monolith` asks FE/client then BE). A lane already declared by
+`platform-repos.json` is locked. CodeGraph wire is optional during `init` and
+can wait until indexes exist (see below).
 
 For CI or other non-interactive use, keep using the long flags: `--target`,
-`--type`, the required `--adapter`, `--project-root`, and `--yes`. With `--yes`,
-the backward-compatible defaults remain `cursor` and `docs`. FE adapters
-`nuxt4`, `nextjs`, and `dotnet-line` sync `/platform-base` (stack-specific content).
+`--type`, the required `--adapter` / `--fe-adapter` / `--be-adapter`,
+`--project-root`, and `--yes`. With `--yes`, the backward-compatible defaults
+remain `cursor` and `docs`. FE adapters `nuxt4`, `nextjs`, and `dotnet-line`
+sync `/platform-base` (stack-specific content).
 
 Windows installation remains available with
 `irm https://raw.githubusercontent.com/raintr91/platform-dna/main/install.ps1 | iex`.
@@ -73,8 +77,30 @@ legacy ERP ở D:\legacy\erp, key legacy-erp
 
 Expected: merge-by-key into `platform-repos.local.json` and/or
 `legacy-repos.local.json` (never absolute paths in portable `platform-repos.json`).
-Then run `platform-dna codegraph:wire`; for each checkout missing `.codegraph/`:
-`cd <root> && codegraph init`. More detail in [docs/PROJECT-MAPS.md](./docs/PROJECT-MAPS.md).
+More detail in [docs/PROJECT-MAPS.md](./docs/PROJECT-MAPS.md).
+
+### CodeGraph wire (often later)
+
+CodeGraph can be installed **after** DNA init. Wire only works for checkouts that
+already have a local `.codegraph/` index. Typical order:
+
+1. `platform-dna init` (skip wire if indexes are not ready — choose Skip, or pass
+   `--no-codegraph`)
+2. `/configure-repo-maps` — fill `*.local.json` roots
+3. Install CodeGraph CLI if needed, then index each checkout:
+   `cd <root> && codegraph init`
+4. From the hub you opened in Cursor:
+
+```bash
+platform-dna codegraph:wire
+# optional: platform-dna codegraph:wire --codegraph-repos=portal,api
+# dry-run:  platform-dna codegraph:wire   # outside TTY is dry-run unless --yes
+```
+
+`codegraph:wire` merges `codegraph-<key>` servers into `.cursor/mcp.json` from the
+machine-local maps (platform first, then legacy). Re-run anytime after adding
+repos or finishing `codegraph init`. Init-time wire is the same step when Cursor
+is selected and candidates already exist.
 
 Safety:
 
@@ -87,7 +113,7 @@ Safety:
 - `--dry-run` prints package invocations without writing or cloning.
 - `.platform-dna/install-manifest.json` tracks active and stale Platform-DNA-owned
   harness files plus hashes for maps that Platform DNA itself seeded. Switching
-  among `docs`, `fe`, `be`, and `tests` marks old profile-only assets stale.
+  among `docs`, `fe`, `be`, `monolith`, and `tests` marks old profile-only assets stale.
 - `status` reports missing, modified, and unmodified managed files. `prune` is
   dry-run by default and deletes only stale files whose current SHA-256 still
   matches the install manifest; use `--yes` to apply.
