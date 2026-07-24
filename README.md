@@ -1,7 +1,7 @@
 # Platform DNA
 
 Profile resolver and repository identity bootstrap for **docs and code repos**
-(`docs` · `fe` · `be` · `tests`). Never install into toolkit source checkouts.
+(`docs` · `fe` · `be` · `monolith` · `tests`). Never install into toolkit source checkouts.
 
 ## Quick start
 
@@ -19,7 +19,7 @@ one. A lane already declared by `platform-repos.json` is locked.
 For CI or other non-interactive use, keep using the long flags: `--target`,
 `--type`, the required `--adapter`, `--project-root`, and `--yes`. With `--yes`,
 the backward-compatible defaults remain `cursor` and `docs`. FE adapters
-`nuxt4` and `nextjs` also sync `/platform-base`.
+`nuxt4`, `nextjs`, and `dotnet-line` sync `/platform-base` (stack-specific content).
 
 Windows installation remains available with
 `irm https://raw.githubusercontent.com/raintr91/platform-dna/main/install.ps1 | iex`.

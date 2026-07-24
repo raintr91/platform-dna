@@ -111,7 +111,19 @@ test('profile manifest freezes adapters and lane markers', () => {
     'laravel',
     'dotnet-integration',
   ])
+  assert.deepEqual(manifest.profiles.monolith.feAdapters, [
+    'nuxt4',
+    'nextjs',
+    'dotnet-line',
+  ])
+  assert.deepEqual(manifest.profiles.monolith.beAdapters, [
+    'fastapi',
+    'laravel',
+    'dotnet-integration',
+  ])
   assert.deepEqual(manifest.profiles.fe.ownedSkills, ['platform-base'])
+  assert.deepEqual(manifest.profiles.be.ownedSkills, ['platform-base-be'])
+  assert.deepEqual(manifest.profiles.tests.ownedSkills, ['platform-base'])
   const schema = JSON.parse(
     readFileSync(
       path.resolve('templates/schemas/platform-repos.schema.json'),
@@ -119,6 +131,7 @@ test('profile manifest freezes adapters and lane markers', () => {
     ),
   )
   assert.equal(schema.properties.defaultGroup.enum.includes('tooling'), false)
+  assert.ok(schema.properties.defaultGroup.enum.includes('monolith'))
   assert.equal(
     schema.properties.projects.additionalProperties.properties.role.enum.includes(
       'tooling',
@@ -138,10 +151,97 @@ test('profile manifest freezes adapters and lane markers', () => {
     'configure-repo-maps',
   ])
   assert.deepEqual(packageContract.skillsByType.be, [
+    'platform-base-be',
+    'legacy',
+    'configure-repo-maps',
+  ])
+  assert.deepEqual(packageContract.skillsByType.monolith, [
+    'platform-base',
+    'platform-base-be',
     'legacy',
     'configure-repo-maps',
   ])
   assert.deepEqual(packageContract.ownedRules, [])
+})
+
+test('init wizard offers monolith and asks FE then BE adapters', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-wizard-mono-'))
+  writeFileSync(path.join(root, 'package.json'), '{}\n')
+  writeFileSync(path.join(root, 'nuxt.config.ts'), '')
+  writeFileSync(
+    path.join(root, 'pyproject.toml'),
+    '[project]\nname="api"\ndependencies=["fastapi>=0.115"]\n',
+  )
+  const order = []
+  const selection = await resolveInitWizard({
+    root,
+    manifest,
+    interactive: true,
+    detectedAgents: ['cursor'],
+    codegraphCandidateKeys: [],
+    prompts: {
+      async checkbox() {
+        order.push('agent')
+        return ['cursor']
+      },
+      async select(opts) {
+        if (opts.message.includes('destination lane')) {
+          order.push('lane')
+          assert.ok(opts.choices.some((c) => c.value === 'monolith'))
+          assert.equal(
+            opts.choices.some((c) => c.value === 'none'),
+            false,
+          )
+          return 'monolith'
+        }
+        if (opts.message.includes('FE adapter') || opts.message.includes('FE/client')) {
+          order.push('fe')
+          return 'nuxt4'
+        }
+        if (opts.message.includes('BE adapter')) {
+          order.push('be')
+          return 'fastapi'
+        }
+        return 'later'
+      },
+    },
+  })
+  assert.deepEqual(order, ['agent', 'lane', 'fe', 'be'])
+  assert.equal(selection.type, 'monolith')
+  assert.equal(selection.feAdapter, 'nuxt4')
+  assert.equal(selection.beAdapter, 'fastapi')
+  assert.equal(selection.adapter, undefined)
+})
+
+test('monolith installs both FE and BE platform-base skills', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'platform-dna-mono-'))
+  writeFileSync(path.join(root, 'package.json'), '{}\n')
+  writeFileSync(path.join(root, 'nuxt.config.ts'), '')
+  writeFileSync(
+    path.join(root, 'pyproject.toml'),
+    '[project]\nname="api"\ndependencies=["fastapi>=0.115"]\n',
+  )
+  validateTarget({
+    root,
+    type: 'monolith',
+    profile: manifest.profiles.monolith,
+    feAdapter: 'nuxt4',
+    beAdapter: 'fastapi',
+  })
+  const maps = seedProjectMaps({ root, type: 'monolith', repoName: 'app' })
+  const harness = installHarness({
+    root,
+    type: 'monolith',
+    feAdapter: 'nuxt4',
+    beAdapter: 'fastapi',
+    gitignoreEntries: maps.gitignoreEntries,
+  })
+  assert.equal(harness.conflicts.length, 0, harness.conflicts.join('\n'))
+  assert.equal(existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')), true)
+  assert.equal(existsSync(path.join(root, '.cursor/skills/platform-base-be/SKILL.md')), true)
+  assert.equal(existsSync(path.join(root, '.cursor/skills/configure-repo-maps/SKILL.md')), true)
+  const map = JSON.parse(readFileSync(path.join(root, 'platform-repos.json'), 'utf8'))
+  assert.equal(map.projects.app.role, 'monolith')
 })
 
 test('init wizard prompts agents, lane, adapter, then codegraph', async () => {
@@ -185,6 +285,8 @@ test('init wizard prompts agents, lane, adapter, then codegraph', async () => {
     target: 'cursor,claude',
     type: 'fe',
     adapter: 'nextjs',
+    feAdapter: 'nextjs',
+    beAdapter: undefined,
     wireCodegraph: true,
   })
 })
@@ -247,6 +349,8 @@ test('non-interactive init keeps cursor and docs defaults', async () => {
     target: 'cursor',
     type: 'docs',
     adapter: undefined,
+    feAdapter: undefined,
+    beAdapter: undefined,
     wireCodegraph: true,
   })
 })
@@ -275,9 +379,10 @@ test('declared project role locks the interactive lane', async () => {
       },
     },
   })
-  assert.deepEqual(prompts, ['agent', 'Select the FE adapter:'])
+  assert.deepEqual(prompts, ['agent', 'Select the FE/client adapter:'])
   assert.equal(selection.type, 'fe')
   assert.equal(selection.adapter, 'nuxt4')
+  assert.equal(selection.feAdapter, 'nuxt4')
 })
 
 for (const [type, adapter] of [
@@ -293,6 +398,8 @@ for (const [type, adapter] of [
       type,
       profile: manifest.profiles[type],
       adapter,
+      feAdapter: type === 'fe' ? adapter : undefined,
+      beAdapter: type === 'be' ? adapter : undefined,
     })
     const maps = seedProjectMaps({ root, type, repoName: `${type}-base` })
     assert.ok(maps.written.length > 0)
@@ -300,13 +407,19 @@ for (const [type, adapter] of [
       root,
       type,
       adapter,
+      feAdapter: type === 'fe' ? adapter : undefined,
+      beAdapter: type === 'be' ? adapter : undefined,
       gitignoreEntries: maps.gitignoreEntries,
     })
     assert.equal(harness.conflicts.length, 0)
     assert.equal(existsSync(path.join(root, '.cursor/skills/platform-ai/SKILL.md')), false)
     assert.equal(
       existsSync(path.join(root, '.cursor/skills/platform-base/SKILL.md')),
-      type === 'fe' && (adapter === 'nuxt4' || adapter === 'nextjs'),
+      (type === 'fe' && Boolean(adapter)) || type === 'tests',
+    )
+    assert.equal(
+      existsSync(path.join(root, '.cursor/skills/platform-base-be/SKILL.md')),
+      type === 'be' && Boolean(adapter),
     )
     assert.equal(
       existsSync(path.join(root, '.cursor/skills/configure-repo-maps/SKILL.md')),
@@ -424,6 +537,27 @@ test('DNA profiles no longer bundle specialist package sets', () => {
   assert.equal(manifest.profiles.docs.recommended, undefined)
   assert.equal(manifest.profiles.fe.recommended, undefined)
   assert.equal(manifest.profiles.be.recommended, undefined)
+})
+
+test('dotnet-line FE syncs WinForms platform-base', () => {
+  const root = target('fe', 'dotnet-line')
+  validateTarget({
+    root,
+    type: 'fe',
+    profile: manifest.profiles.fe,
+    adapter: 'dotnet-line',
+    feAdapter: 'dotnet-line',
+  })
+  const result = installHarness({
+    root,
+    type: 'fe',
+    adapter: 'dotnet-line',
+    feAdapter: 'dotnet-line',
+  })
+  assert.equal(result.conflicts.length, 0)
+  const body = readFileSync(path.join(root, '.cursor/skills/platform-base/SKILL.md'), 'utf8')
+  assert.match(body, /WinForms/)
+  assert.match(body, /dotnet-line/)
 })
 
 test('dotnet adapters validate Line FE and Integration BE', () => {

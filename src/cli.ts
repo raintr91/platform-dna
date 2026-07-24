@@ -53,12 +53,13 @@ function list(name: string): string[] {
 function usage(): never {
   console.log(`platform-dna ${packageVersion()}
 
-  init [--target=agent,…|auto|all|none] [--type=docs|fe|be|tests] [--adapter=…]
+  init [--target=agent,…|auto|all|none] [--type=docs|fe|be|monolith|tests]
+       [--adapter=…] [--fe-adapter=…] [--be-adapter=…]
        [--codegraph | --no-codegraph] [--codegraph-repos=key,…]
        [--project-root <path>] [--docs-root <path>]
        [--repo-name <id>] [--repo-url <url>]
        [--force] [--dry-run] [--yes]
-  validate --type=… [--adapter=…] [--project-root <path>]
+  validate --type=… [--adapter=…] [--fe-adapter=…] [--be-adapter=…] [--project-root <path>]
   status [--project-root <path>]
   prune [--project-root <path>] [--yes] [--dry-run]
   codegraph:wire [--project-root <path>] [--codegraph-repos=key,…]
@@ -68,8 +69,8 @@ function usage(): never {
   profile --type=…
   version
 
-Platform DNA installs only into docs/code hubs (docs · fe · be · tests).
-Run "platform-dna init" in a terminal to select agents, a lane, and an adapter.
+Platform DNA installs into docs/code hubs (docs · fe · be · monolith · tests).
+Monolith requires both --fe-adapter and --be-adapter (wizard asks both).
 Never init into MCP tooling repos (docskit, processkit, …).
 Specialist skills/tools remain owned by their package.
 `)
@@ -277,6 +278,8 @@ async function main(): Promise<void> {
     requestedTarget: arg('--target'),
     requestedType: arg('--type'),
     requestedAdapter: arg('--adapter'),
+    requestedFeAdapter: arg('--fe-adapter'),
+    requestedBeAdapter: arg('--be-adapter'),
 
     wireCodegraphFlag: has('--no-codegraph')
       ? false
@@ -289,6 +292,8 @@ async function main(): Promise<void> {
   const { target, targets, type } = selection
   const profile = manifest.profiles[type]
   const adapter = selection.adapter
+  const feAdapter = selection.feAdapter
+  const beAdapter = selection.beAdapter
   const docsRoot = arg('--docs-root')
 
   if (command === 'profile') {
@@ -301,6 +306,8 @@ async function main(): Promise<void> {
     type,
     profile,
     adapter,
+    feAdapter,
+    beAdapter,
     force: has('--force'),
   })
   assertPortableMap(path.join(root, 'platform-repos.json'))
@@ -320,6 +327,8 @@ async function main(): Promise<void> {
           type,
           root,
           adapter,
+          feAdapter,
+          beAdapter,
           docsRoot,
           wireCodegraph: selection.wireCodegraph,
           codegraphCandidates: codegraphCandidateKeys,
@@ -365,6 +374,8 @@ async function main(): Promise<void> {
     root,
     type,
     adapter,
+    feAdapter,
+    beAdapter,
     force: has('--force'),
     seededMaps: maps.maps,
     gitignoreEntries,

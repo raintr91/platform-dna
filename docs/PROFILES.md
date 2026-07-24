@@ -2,21 +2,24 @@
 
 `profiles.json` is the executable manifest.
 
-Platform DNA installs **only** into product hubs (`docs` · `fe` · `be` · `tests`).
+Platform DNA installs **into** product hubs
+(`docs` · `fe` · `be` · `monolith` · `tests`).
 It does **not** install into toolkit source checkouts (`docskit`, `codegenkit`, …).
+
+| Type | Destination skills | Adapter |
+|------|--------------------|---------|
+| `docs` | `/configure-repo-maps`, `/legacy` | — |
+| `fe` | + `/platform-base` (Nuxt / Next / WinForms Line) | `nuxt4`, `nextjs`, or `dotnet-line` |
+| `be` | + `/platform-base-be` | `fastapi`, `laravel`, or `dotnet-integration` |
+| `monolith` | FE + BE bases | **both** `--fe-adapter` and `--be-adapter` |
+| `tests` | + `/platform-base` (tests hub) | — |
+
 `/platform-ai` stays local to each toolkit source and is never synced by a
-destination profile. Platform DNA's only destination skill is FE
-`/platform-base` for the Nuxt/Next adapters.
+destination profile.
 
-| Type | Recommended toolkits (installed by the bundle) | Adapter |
-|------|--------------------------------------------|---------|
-| `docs` | Docskit, Processkit | — |
-| `fe` | Codegenkit, Testkit, Processkit | `nuxt4`, `nextjs`, or `dotnet-line` |
-| `be` | Codegenkit, Processkit | `fastapi`, `laravel`, or `dotnet-integration` |
-| `tests` | Testkit | — |
-
-`dotnet-line` drops Testkit from the recommended set (no web E2E consumption lane).
-FE DNA owns `/platform-base` for `nuxt4` / `nextjs` adapters only (not `dotnet-line`).
+Wizard order: **agents → lane → adapter(s)**. Lane `fe` is labeled
+**Frontend / Client** (web or WinForms). Monolith asks FE/client adapter then BE
+adapter. Machine id stays `--type=fe` (no separate `client` lane).
 
 Optional toolkits are installed only through `--with`. An optional toolkit
 without install metadata fails with an actionable message; it is never silently

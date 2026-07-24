@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
   "package": "@platform/platform-dna",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "types": [
     "docs",
     "fe",
     "be",
+    "monolith",
     "tests"
   ],
   "requires": [],
@@ -22,10 +23,18 @@
       "configure-repo-maps"
     ],
     "be": [
+      "platform-base-be",
+      "legacy",
+      "configure-repo-maps"
+    ],
+    "monolith": [
+      "platform-base",
+      "platform-base-be",
       "legacy",
       "configure-repo-maps"
     ],
     "tests": [
+      "platform-base",
       "legacy",
       "configure-repo-maps"
     ]

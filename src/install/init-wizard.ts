@@ -1,4 +1,11 @@
-import { resolveType, type ProfileType } from '../config/project-root.js'
+import {
+  resolveBeAdapter,
+  resolveFeAdapter,
+  resolveType,
+  type BeAdapterId,
+  type FeAdapterId,
+  type ProfileType,
+} from '../config/project-root.js'
 import { declaredProfileType } from '../profile/detect.js'
 import type { ProfilesManifest } from '../profile/manifest.js'
 import {
@@ -16,15 +23,19 @@ import {
 
 const laneChoices: Array<{ value: ProfileType; name: string }> = [
   { value: 'docs', name: 'Docs' },
-  { value: 'fe', name: 'Frontend (FE)' },
+  { value: 'fe', name: 'Frontend / Client (FE)' },
   { value: 'be', name: 'Backend (BE)' },
+  { value: 'monolith', name: 'Monolith (FE/Client + BE)' },
   { value: 'tests', name: 'Tests' },
 ]
 
-const adapterNames: Record<string, string> = {
+const FE_ADAPTER_NAMES: Record<string, string> = {
   nuxt4: 'Nuxt 4',
   nextjs: 'Next.js',
-  'dotnet-line': '.NET Line',
+  'dotnet-line': '.NET Line (WinForms)',
+}
+
+const BE_ADAPTER_NAMES: Record<string, string> = {
   fastapi: 'FastAPI',
   laravel: 'Laravel',
   'dotnet-integration': '.NET Integration',
@@ -46,9 +57,10 @@ export interface InitWizardSelection {
   targets: AgentId[]
   target: string
   type: ProfileType
+  /** Single-lane convenience (fe or be only). */
   adapter?: string
-
-  /** Whether to wire cross-repo CodeGraph MCP servers during this init. */
+  feAdapter?: FeAdapterId
+  beAdapter?: BeAdapterId
   wireCodegraph: boolean
 }
 
@@ -58,10 +70,9 @@ export async function resolveInitWizard(opts: {
   requestedTarget?: string
   requestedType?: string
   requestedAdapter?: string
-
-  /** Explicit `--codegraph` / `--no-codegraph`; undefined defers to the wizard. */
+  requestedFeAdapter?: string
+  requestedBeAdapter?: string
   wireCodegraphFlag?: boolean
-  /** CodeGraph server keys available to wire (derived from machine-local maps). */
   codegraphCandidateKeys?: string[]
   interactive: boolean
   detectedAgents?: AgentId[]
@@ -98,21 +109,53 @@ export async function resolveInitWizard(opts: {
         : resolveType()
 
   const profile = opts.manifest.profiles[type]
-  let adapter = opts.requestedAdapter
-  if (opts.interactive && profile.requiresAdapter && !adapter) {
-    adapter = await prompts.select({
-      message: `Select the ${type.toUpperCase()} adapter:`,
-      choices: (profile.adapters ?? []).map((value) => ({
-        value,
-        name: adapterNames[value] ?? value,
-      })),
-    })
+  let feAdapter: FeAdapterId | undefined
+  let beAdapter: BeAdapterId | undefined
+
+  if (type === 'fe' || type === 'monolith') {
+    const feList = type === 'fe' ? (profile.adapters ?? []) : (profile.feAdapters ?? [])
+    const requested =
+      opts.requestedFeAdapter ?? (type === 'fe' ? opts.requestedAdapter : undefined)
+    if (requested) {
+      feAdapter = resolveFeAdapter(requested)
+    } else if (opts.interactive) {
+      feAdapter = (await prompts.select({
+        message: 'Select the FE/client adapter:',
+        choices: feList.map((value) => ({
+          value,
+          name: FE_ADAPTER_NAMES[value] ?? value,
+        })),
+      })) as FeAdapterId
+    } else if (type === 'fe') {
+      feAdapter = resolveFeAdapter()
+    } else {
+      throw new Error('--fe-adapter is required for --type=monolith')
+    }
   }
 
+  if (type === 'be' || type === 'monolith') {
+    const beList = type === 'be' ? (profile.adapters ?? []) : (profile.beAdapters ?? [])
+    const requested =
+      opts.requestedBeAdapter ?? (type === 'be' ? opts.requestedAdapter : undefined)
+    if (requested) {
+      beAdapter = resolveBeAdapter(requested)
+    } else if (opts.interactive) {
+      beAdapter = (await prompts.select({
+        message: 'Select the BE adapter:',
+        choices: beList.map((value) => ({
+          value,
+          name: BE_ADAPTER_NAMES[value] ?? value,
+        })),
+      })) as BeAdapterId
+    } else if (type === 'be') {
+      beAdapter = resolveBeAdapter()
+    } else {
+      throw new Error('--be-adapter is required for --type=monolith')
+    }
+  }
 
+  const adapter = type === 'fe' ? feAdapter : type === 'be' ? beAdapter : undefined
 
-  // Cross-repo CodeGraph wiring: only meaningful when Cursor is targeted and the
-  // machine-local maps declare other repos. Members can skip and wire later.
   const cursorSelected = targets.includes('cursor')
   const candidates = opts.codegraphCandidateKeys ?? []
   let wireCodegraph = opts.wireCodegraphFlag ?? cursorSelected
@@ -137,7 +180,8 @@ export async function resolveInitWizard(opts: {
     target: targets.join(',') || 'none',
     type,
     adapter,
-
+    feAdapter,
+    beAdapter,
     wireCodegraph: wireCodegraph && cursorSelected,
   }
 }

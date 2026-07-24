@@ -6,7 +6,7 @@
   "required": ["defaultGroup", "groups", "projects"],
   "properties": {
     "$schema": { "type": "string", "format": "uri" },
-    "defaultGroup": { "enum": ["docs", "fe", "be", "tests"] },
+    "defaultGroup": { "enum": ["docs", "fe", "be", "monolith", "tests"] },
     "groups": { "type": "object" },
     "projects": {
       "type": "object",
@@ -16,7 +16,7 @@
         "required": ["root", "role", "repo", "write"],
         "properties": {
           "root": { "const": "." },
-          "role": { "enum": ["docs", "fe", "be", "tests"] },
+          "role": { "enum": ["docs", "fe", "be", "monolith", "tests"] },
           "repo": { "type": "string", "minLength": 1 },
           "url": { "type": "string", "format": "uri" },
           "write": { "type": "boolean" }

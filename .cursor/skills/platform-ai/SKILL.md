@@ -11,8 +11,9 @@ itself. Do not run Platform DNA against toolkit source checkouts.
 
 ## Scope
 
-- Own profile resolution for `docs`, `fe`, `be`, and `tests`.
+- Own profile resolution for `docs`, `fe`, `be`, `monolith`, and `tests`.
 - Own the repo-only `platform-repos` schema/seeding, FE `/platform-base`,
+  BE `/platform-base-be`, tests-hub `/platform-base`,
   SSOT `ensureLocalRepoMaps`, and `/configure-repo-maps`.
 - Reject MCP targets (`mcp-package.json` or `role=tooling`).
 - Never sync `/platform-ai` or lane/meta rules into destination repos.

@@ -13,10 +13,19 @@
     "be": {
       "requiresAdapter": true,
       "adapters": ["fastapi", "laravel", "dotnet-integration"],
-      "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json", "*.sln"]
+      "repoMarkers": ["pyproject.toml", "composer.json", "src/composer.json", "*.sln"],
+      "ownedSkills": ["platform-base-be"]
+    },
+    "monolith": {
+      "requiresAdapter": true,
+      "feAdapters": ["nuxt4", "nextjs", "dotnet-line"],
+      "beAdapters": ["fastapi", "laravel", "dotnet-integration"],
+      "repoMarkers": ["package.json", "pyproject.toml", "composer.json", "*.sln"],
+      "ownedSkills": ["platform-base", "platform-base-be"]
     },
     "tests": {
-      "repoMarkers": ["cases", "tests", "package.json"]
+      "repoMarkers": ["cases", "tests", "package.json"],
+      "ownedSkills": ["platform-base"]
     }
   }
 }

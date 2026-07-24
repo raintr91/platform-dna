@@ -141,11 +141,15 @@ export function harnessSourceToTarget(source: string, agentDir: string = '.curso
   if (
     parts[2] === 'adapters' &&
     parts[3] &&
-    (parts[1] === 'fe' || parts[1] === 'be' || parts[1] === 'docs' || parts[1] === 'tests')
+    (parts[1] === 'fe' ||
+      parts[1] === 'be' ||
+      parts[1] === 'docs' ||
+      parts[1] === 'tests' ||
+      parts[1] === 'monolith')
   ) {
     return `${agentDir}/${parts.slice(4).join('/')}`
   }
-  // harness/common|docs|fe|be|tests/<rel> → agentDir/<rel>
+  // harness/common|docs|fe|be|tests|monolith/<rel> → agentDir/<rel>
   return `${agentDir}/${parts.slice(2).join('/')}`
 }
 
@@ -153,7 +157,7 @@ function manifestFile(root: string): string {
   return path.join(root, '.platform-dna', 'install-manifest.json')
 }
 
-const profileTypes: ProfileType[] = ['docs', 'fe', 'be', 'tests']
+const profileTypes: ProfileType[] = ['docs', 'fe', 'be', 'monolith', 'tests']
 const sha256Pattern = /^[a-f0-9]{64}$/
 const protectedBasenames = new Set([
   '.gitignore',
@@ -205,7 +209,7 @@ function validateManifestFile(targetRel: string, value: unknown): InstallManifes
   if (!isRecord(value)) throw new Error(`Invalid manifest file record: ${relative}`)
   const source = normalizedRelative(String(value.source ?? ''), 'source path')
   if (
-    !/^harness\/(?:common|docs|fe|be|tests)\/(?:adapters\/[^/]+\/)?.+/.test(source)
+    !/^harness\/(?:common|docs|fe|be|tests|monolith)\/(?:adapters\/[^/]+\/)?.+/.test(source)
   ) {
     throw new Error(`Manifest contains a non-DNA source: ${source}`)
   }
@@ -515,6 +519,8 @@ export function installHarness(opts: {
   root: string
   type: ProfileType
   adapter?: string
+  feAdapter?: string
+  beAdapter?: string
   force?: boolean
   seededMaps?: SeededProjectMap[]
   gitignoreEntries?: OwnedGitignoreEntry[]
@@ -525,17 +531,24 @@ export function installHarness(opts: {
   const previous = readInstallManifest(targetRoot)
   const roots: Array<{ dir: string; skipNames?: Set<string> }> = [
     { dir: path.join(packageRoot(), 'harness', 'common') },
-    // Skip adapters/ so lane walk does not copy overlay trees into .cursor/adapters/
-    { dir: path.join(packageRoot(), 'harness', opts.type), skipNames: new Set(['adapters']) },
   ]
-  if (opts.adapter) {
-    const overlay = path.join(
-      packageRoot(),
-      'harness',
-      opts.type,
-      'adapters',
-      opts.adapter,
-    )
+  // Lane trees are optional. FE/BE skills live under adapters/; tests has lane skills.
+  const laneRoot = path.join(packageRoot(), 'harness', opts.type)
+  if (existsSync(laneRoot)) {
+    roots.push({ dir: laneRoot, skipNames: new Set(['adapters']) })
+  }
+
+  const overlaySpecs: Array<{ lane: 'fe' | 'be'; adapter: string }> = []
+  if (opts.type === 'fe' && (opts.feAdapter || opts.adapter)) {
+    overlaySpecs.push({ lane: 'fe', adapter: opts.feAdapter ?? opts.adapter! })
+  } else if (opts.type === 'be' && (opts.beAdapter || opts.adapter)) {
+    overlaySpecs.push({ lane: 'be', adapter: opts.beAdapter ?? opts.adapter! })
+  } else if (opts.type === 'monolith') {
+    if (opts.feAdapter) overlaySpecs.push({ lane: 'fe', adapter: opts.feAdapter })
+    if (opts.beAdapter) overlaySpecs.push({ lane: 'be', adapter: opts.beAdapter })
+  }
+  for (const spec of overlaySpecs) {
+    const overlay = path.join(packageRoot(), 'harness', spec.lane, 'adapters', spec.adapter)
     if (existsSync(overlay)) roots.push({ dir: overlay })
   }
   const result = {
